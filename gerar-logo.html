@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Gerador de Logo PNG</title>
+</head>
+
+<body style="background:#000; color:#fff; font-family:Arial; text-align:center; padding-top:100px">
+    <h1>Gerador de Logo OZN (PNG)</h1>
+    <p>Clique no botão abaixo para baixar o logo.png</p>
+    <button onclick="gerarPNG()"
+        style="padding:20px 40px; font-size:18px; cursor:pointer; background:#007AFF; color:#fff; border:none; border-radius:8px">
+        📥 BAIXAR LOGO.PNG
+    </button>
+    <br><br>
+    <canvas id="canvas" width="512" height="512" style="border:1px solid #333; margin-top:20px"></canvas>
+
+    <script>
+        function gerarPNG() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Fundo preto
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Texto OZN branco
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 180px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('OZN', 256, 280);
+
+            // Converter para PNG e baixar
+            canvas.toBlob(function (blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'logo.png';
+                a.click();
+                URL.revokeObjectURL(url);
+                alert('✅ Logo PNG baixado! Salve na pasta: ozn gateway');
+            });
+        }
+
+        // Desenhar preview
+        window.onload = gerarPNG;
+    </script>
+</body>
+
+</html>
