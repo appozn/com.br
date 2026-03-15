@@ -440,16 +440,13 @@ const UI = {
         notifications() {
             return `
                 <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px">
-                        <h2 class="outfit">Histórico</h2>
-                        ${State.notifications.length > 0 ? `<button onclick="Actions.clearAll()" style="background:none; border:none; color:var(--error); font-size:0.85rem; cursor:pointer;">Limpar Tudo</button>` : ''}
-                    </div>
+                    <h2 class="outfit" style="margin-bottom:30px">Histórico</h2>
                     ${State.notifications.length === 0 ? '<p style="opacity:0.4; text-align:center; padding:30px;">Nenhuma notificação ainda.</p>' : ''}
-                    ${State.notifications.map((n, i) => `
-                        <div class="ntf-card" style="position:relative; padding-right:48px">
+                    ${State.notifications.map(n => `
+                        <div class="ntf-card">
                             <b>${n.title}</b><br>
                             <span style="color:var(--success)">+ R$ ${Math.abs(Number(n.net)).toFixed(2)}</span>
-                            <button onclick="Actions.deleteNotif(${i})" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--error); font-size:1.2rem; cursor:pointer; line-height:1">&times;</button>
+                            <span style="float:right; opacity:0.4; font-size:0.75rem">${n.timestamp ? new Date(n.timestamp).toLocaleDateString('pt-BR') : ''}</span>
                         </div>
                     `).join('')}
                 </div>
