@@ -110,11 +110,15 @@ const State = {
 
         // Tentar enviar para o backend
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 200);
             const response = await fetch(`${BACKEND_URL}/api/notifications`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type, value })
+                body: JSON.stringify({ type, value }),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
             if (!response.ok) throw new Error('Falha na API');
             // WebSocket atualizará a UI
         } catch (e) {
@@ -165,7 +169,6 @@ const System = {
     trigger(notif) {
         this.playAlert();
         this.vibrate();
-        this.showBanner(notif);
         this.sendPush(notif);
         if (State.isLocked) UI.render();
     },
@@ -197,10 +200,11 @@ const System = {
     },
 
     sendPush(notif) {
+        const amount = Math.abs(Number(notif.net || 0)).toFixed(2);
         if (window.swRegistration && Notification.permission === "granted") {
             try {
                 window.swRegistration.showNotification("OZN PAY 💎", {
-                    body: `${notif.title}\nLíquido: R$ ${Number(notif.net || 0).toFixed(2)}`,
+                    body: `${notif.title}\n+ R$ ${amount}`,
                     icon: 'logo.png',
                     badge: 'logo.png',
                     vibrate: [200, 100, 200],
@@ -214,7 +218,7 @@ const System = {
         if (Notification.permission === "granted") {
             try {
                 new Notification("OZN PAY", {
-                    body: `${notif.title}\nValor Líquido: R$ ${Number(notif.net || 0).toFixed(2)}`,
+                    body: `${notif.title}\n+ R$ ${amount}`,
                     icon: 'logo.png'
                 });
             } catch (e) { console.error("Notificação nativa falhou", e); }
@@ -409,7 +413,7 @@ const UI = {
                     ${State.notifications.slice(0, 5).map(n => `
                         <div class="ntf-card">
                             <b>${n.title}</b><br>
-                            <span style="color:var(--${n.type === 'withdraw' ? 'error' : 'success'})">${n.type === 'withdraw' ? '' : '+ '}R$ ${Number(n.net).toFixed(2)}</span>
+                            <span style="color:var(--success)">+ R$ ${Math.abs(Number(n.net)).toFixed(2)}</span>
                             <span style="float:right; opacity:0.4; font-size:0.75rem">${n.timestamp ? new Date(n.timestamp).toLocaleDateString('pt-BR') : ''}</span>
                         </div>
                     `).join('')}
@@ -444,7 +448,7 @@ const UI = {
                     ${State.notifications.map((n, i) => `
                         <div class="ntf-card" style="position:relative; padding-right:48px">
                             <b>${n.title}</b><br>
-                            <span style="color:var(--${n.type === 'withdraw' ? 'error' : 'success'})">${n.type === 'withdraw' ? '' : '+ '}R$ ${Number(n.net).toFixed(2)}</span>
+                            <span style="color:var(--success)">+ R$ ${Math.abs(Number(n.net)).toFixed(2)}</span>
                             <button onclick="Actions.deleteNotif(${i})" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--error); font-size:1.2rem; cursor:pointer; line-height:1">&times;</button>
                         </div>
                     `).join('')}
