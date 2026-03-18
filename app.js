@@ -1,7 +1,8 @@
-// Bunny Pay - Platform Engine v5.7
-if (!localStorage.getItem('bunny_wiped_v57')) {
+const savedIp = localStorage.getItem('bunny_server_ip');
+if (!localStorage.getItem('bunny_wiped_v58')) {
     localStorage.clear();
-    localStorage.setItem('bunny_wiped_v57', 'true');
+    if (savedIp) localStorage.setItem('bunny_server_ip', savedIp);
+    localStorage.setItem('bunny_wiped_v58', 'true');
 }
 window.onerror = function (msg, url, line, col, error) {
     alert(`ERRO CRÍTICO DO SISTEMA:\n${msg}\nLinha: ${line}`);
@@ -18,7 +19,8 @@ if (window.location.hostname && window.location.hostname !== '') {
 }
 
 if (location.protocol === 'file:') {
-    BACKEND_URL = 'http://localhost:3000';
+    const savedIp = localStorage.getItem('bunny_server_ip');
+    BACKEND_URL = savedIp ? `http://${savedIp}:3000` : 'http://localhost:3000';
 }
 
 const WS_URL = BACKEND_URL.replace('http', 'ws');
@@ -33,19 +35,17 @@ function connectWebSocket() {
     try {
         ws = new WebSocket(WS_URL);
     } catch(e) {
-        console.warn('WebSocket indisponível, modo offline ativo.');
         return;
     }
 
     ws.onopen = () => {
-        console.log('✅ Conectado ao servidor');
+        State.fetchAll(); // Forçar sincronia total ao conectar
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
 
     ws.onmessage = (event) => {
         try {
             const message = JSON.parse(event.data);
-
             if (message.event === 'connected') {
                 if (message.data.notifications) State.notifications = message.data.notifications;
                 if (message.data.products) State.products = message.data.products;
@@ -56,40 +56,27 @@ function connectWebSocket() {
                 State.saveLocal();
                 UI.render();
             }
-
             if (message.event === 'new_notification') {
                 State.notifications.unshift(message.data);
                 State.saveLocal();
                 System.trigger(message.data);
                 UI.render();
             }
-        } catch (e) {
-            console.error('Erro ao processar mensagem:', e);
-        }
+        } catch (e) { console.error('Erro WebSocket msg:', e); }
     };
 
     ws.onclose = () => {
-        console.log('Servidor offline. Modo local ativo.');
         ws = null;
-        reconnectTimeout = setTimeout(connectWebSocket, 10000); // Tenta silenciosamente a cada 10s
+        reconnectTimeout = setTimeout(connectWebSocket, 2000); // Tentar a cada 2s silenciosamente
     };
 
-    ws.onerror = (error) => {
-        console.warn('WebSocket erro (silenciado)');
+    ws.onerror = () => {
         ws?.close();
     };
 }
 
 function showConnectionStatus(msg, color) {
-    let status = document.getElementById('connection-status');
-    if (!status) {
-        status = document.createElement('div');
-        status.id = 'connection-status';
-        status.style.cssText = `position:fixed;top:10px;right:10px;background:${color};color:#000;padding:8px 16px;border-radius:20px;z-index:10000;font-weight:bold;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3)`;
-        document.body.appendChild(status);
-    }
-    status.textContent = msg;
-    status.style.background = color;
+    // Silenciado por pedido do usuário
 }
 
 // Tentar conectar silenciosamente (sem banner visível)
@@ -121,18 +108,14 @@ const State = {
         const brTime = new Date(now.getTime() + (offset * 3600000));
         const timestamp = customTimestamp || (new Date(brTime.getTime())).toISOString();
         
-        // Emulando tempo de resposta rápido
+        // Salvar no servidor de forma robusta
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 150);
-            fetch(`${BACKEND_URL}/api/notifications`, {
+            await fetch(`${BACKEND_URL}/api/notifications`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type, value, timestamp }),
-                signal: controller.signal
-            }).catch(() => {}); // Fogo rápido
-            clearTimeout(timeoutId);
-        } catch (e) {}
+                body: JSON.stringify({ type, value, timestamp })
+            });
+        } catch (e) { console.warn('Falha ao salvar no servidor (Offline)'); }
 
         const notif = {
             id: Date.now() + Math.random(), type, title: title, value: gross, fee, net, timestamp, read: false
@@ -187,7 +170,7 @@ const State = {
         if (this.genTimer) clearTimeout(this.genTimer);
         this._isCycling = false;
 
-        const runCycle = () => {
+        const runCycle = async () => {
             const config = this.settings.custom_gen || { active: false };
             if (!config.active) {
                 this._isCycling = false;
@@ -209,12 +192,12 @@ const State = {
             this._cycleIdx++;
 
             // 1. Pix Gerado
-            this.notify('pix', p.value);
+            await this.notify('pix', p.value);
             
             // 2. Agendar Venda para exatamente 60 segundos depois
-            setTimeout(() => {
+            setTimeout(async () => {
                 if (this.settings.custom_gen?.active) {
-                    this.notify('sale', p.value);
+                    await this.notify('sale', p.value);
                 }
             }, 60000);
             
@@ -517,16 +500,27 @@ const UI = {
                 }
             }, 100);
 
+            if (State.isPC && !State._ips) {
+                fetch(`${BACKEND_URL}/api/info`).then(r => r.json()).then(d => {
+                    State._ips = d.ips;
+                    UI.render();
+                }).catch(() => {});
+            }
+
             return `
                 <div class="animate-enter" style="padding-top:40px; padding-bottom:80px">
                     <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px">
                         <img src="logo.png?v=10" alt="Bunny Pay" style="width:80px; height:80px; object-fit:contain; filter:drop-shadow(0 4px 15px rgba(130, 10, 209, 0.2))">
                     </div>
-                        <div style="display:flex; justify-content:space-between; width:100%">
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom: 20px;">
+                        <div>
                             <h2 class="outfit">Dashboard</h2>
-                            <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
+                            ${State.isPC && State._ips ? `<p style="font-size:0.7rem; opacity:0.5; margin-top:2px;">IP para Celular: ${State._ips.join(', ')}</p>` : ''}
                         </div>
+                        <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
                     </div>
+
                     <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(130,10,209,0.05), transparent); position:relative; overflow:hidden;">
                         <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:6px 12px; font-size:0.75rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
                         <p style="opacity:0.6; font-size:0.8rem; margin-bottom:4px;">Saldo Disponível</p>
@@ -708,8 +702,6 @@ const UI = {
                 <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
                     <h2 class="outfit" style="margin-bottom:40px">Configurações</h2>
                     
-
-
                     ${State.isPC ? `
                     <div class="card-luxe" style="margin-bottom:20px">
                         <h4 class="outfit" style="margin-bottom:6px">Corrigir Saldo</h4>
@@ -723,10 +715,17 @@ const UI = {
                         <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Apaga todo o histórico de vendas e notificações. Produtos não são afetados.</p>
                         <button class="btn-luxe btn-secondary" style="color:var(--error)" onclick="Actions.resetDashboard()">Zerar Agora</button>
                     </div>
-                    ` : ''}
+                    ` : `
+                    <div class="card-luxe" style="margin-bottom:20px">
+                        <h4 class="outfit" style="margin-bottom:6px">IP do Servidor (PC)</h4>
+                        <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Digite o IP do PC para sincronizar as notificações.</p>
+                        <input type="text" id="srv-ip" class="input-luxe" placeholder="Ex: 192.168.1.10" value="${localStorage.getItem('bunny_server_ip') || ''}" style="margin-bottom:12px">
+                        <button class="btn-luxe btn-primary" onclick="Actions.saveServerIp()">Conectar ao PC</button>
+                    </div>
+                    `}
                     
                     <button class="btn-luxe btn-secondary" onclick="Auth.logout()" style="color:var(--error); margin-bottom: 20px;">Sair da Conta</button>
-                    <p style="text-align:center; opacity:0.3; font-size:0.7rem">Bunny Pay v5.8</p>
+                    <p style="text-align:center; opacity:0.3; font-size:0.7rem">Bunny Pay v5.8 (PRO)</p>
                 </div>
             `;
         }
@@ -876,6 +875,14 @@ const Actions = {
         State.saveLocal();
         UI.showToast('✅ Dashboard zerada!');
         UI.render();
+    },
+
+    saveServerIp() {
+        const ip = document.getElementById('srv-ip').value;
+        if (!ip) return alert('Digite o IP.');
+        localStorage.setItem('bunny_server_ip', ip);
+        UI.showToast('✅ IP Salvo! Reiniciando...');
+        setTimeout(() => location.reload(), 1000);
     },
 
     async toggleProdStatus(id, is_active) {

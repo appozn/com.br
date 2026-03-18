@@ -13,6 +13,18 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 // API Routes
+app.get('/api/info', (req, res) => {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    const ips = [];
+    Object.keys(interfaces).forEach(name => {
+        interfaces[name].forEach(iface => {
+            if (iface.family === 'IPv4' && !iface.internal) ips.push(iface.address);
+        });
+    });
+    res.json({ ips });
+});
+
 app.get('/api/notifications', async (req, res) => {
     try {
         res.json(await db.getAllNotifications());
@@ -23,14 +35,14 @@ app.get('/api/notifications', async (req, res) => {
 
 app.post('/api/notifications', async (req, res) => {
     try {
-        const { type, value } = req.body;
+        const { type, value, timestamp } = req.body;
         const isWithdraw = type === 'withdraw';
         const gross = parseFloat(value);
         const fee = isWithdraw ? 0 : (gross * 0.0599) + 2.49;
         const net = isWithdraw ? -gross : gross - fee;
         const title = isWithdraw ? 'Saque Realizado!' : (type === 'pix' ? 'Pix Gerado!' : 'Venda Aprovada!');
 
-        const notification = await db.createNotification(type, title, gross, fee, net);
+        const notification = await db.createNotification(type, title, gross, fee, net, timestamp);
 
         // Broadcast para todos os clientes WebSocket
         wss.clients.forEach(client => {
@@ -105,8 +117,8 @@ app.get('/api/settings', async (req, res) => {
 
 app.post('/api/settings', async (req, res) => {
     try {
-        const { notif_limit, notif_interval, is_generator_on } = req.body;
-        const settings = await db.updateSettings(notif_limit, notif_interval, is_generator_on);
+        const { notif_limit, notif_interval, is_generator_on, custom_gen } = req.body;
+        const settings = await db.updateSettings(notif_limit, notif_interval, is_generator_on, custom_gen);
         broadcastState();
         res.json(settings);
     } catch (e) {
@@ -167,9 +179,19 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     try {
         // Migração forçada para garantir sincronia com as novas regras
         db.prepare("UPDATE products SET is_active = 1 WHERE is_active = 0").run();
-        db.prepare("UPDATE products SET created_at = ? WHERE created_at IS NULL").run(new Date(0).toISOString());
-        console.log('✅ Produtos sincronizados com o novo fluxo');
-    } catch(e) { console.log('ℹ️ Otimização de DB já aplicada'); }
+        
+        // Verificar se custom_gen existe, se não, adicionar
+        try {
+            db.prepare("SELECT custom_gen FROM settings LIMIT 1").get();
+        } catch (e) {
+            db.prepare("ALTER TABLE settings ADD COLUMN custom_gen TEXT DEFAULT '{\"active\":false,\"count\":30,\"interval\":10,\"productIds\":[]}'").run();
+            console.log('✅ Coluna custom_gen adicionada com sucesso');
+        }
+
+        console.log('✅ Banco de dados sincronizado com sucesso');
+    } catch(e) { 
+        console.log('⚠️ Aviso na inicialização do DB:', e.message); 
+    }
     console.log('✅ WebSocket ativo (sincronização em tempo real)');
     console.log('');
     console.log('Pressione Ctrl+C para parar o servidor');
