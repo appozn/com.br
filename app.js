@@ -25,6 +25,11 @@ if (location.protocol === 'file:') {
 
 const WS_URL = BACKEND_URL.replace('http', 'ws');
 
+// Inicialização Supabase (Sincronização Cloud Global)
+const supabaseUrl = 'https://bpickkklhpesvfbxnseh.supabase.co';
+const supabaseKey = 'sb_publishable_fTn92z0nksPNSCmELtDmOQ_KUBFcOPs';
+const supabase = (typeof window !== 'undefined' && window.supabase) ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+
 let ws = null;
 let reconnectTimeout = null;
 
@@ -108,14 +113,20 @@ const State = {
         const brTime = new Date(now.getTime() + (offset * 3600000));
         const timestamp = customTimestamp || (new Date(brTime.getTime())).toISOString();
         
-        // Salvar no servidor de forma robusta
+        // Salvar no servidor (Cloud ou Local)
         try {
-            await fetch(`${BACKEND_URL}/api/notifications`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type, value, timestamp })
-            });
-        } catch (e) { console.warn('Falha ao salvar no servidor (Offline)'); }
+            if (supabase) {
+                await supabase.from('notifications').insert([{
+                    type, title, value: gross, fee, net, timestamp
+                }]);
+            } else {
+                await fetch(`${BACKEND_URL}/api/notifications`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type, value, timestamp })
+                });
+            }
+        } catch (e) { console.warn('Falha ao salvar venda na nuvem'); }
 
         const notif = {
             id: Date.now() + Math.random(), type, title: title, value: gross, fee, net, timestamp, read: false
@@ -128,18 +139,44 @@ const State = {
 
     async fetchAll() {
         try {
-            const [p, n, s] = await Promise.all([
-                fetch(`${BACKEND_URL}/api/products`).then(r => r.json()),
-                fetch(`${BACKEND_URL}/api/notifications`).then(r => r.json()),
-                fetch(`${BACKEND_URL}/api/settings`).then(r => r.json())
-            ]);
-            this.products = p;
-            this.notifications = n;
-            this.settings = s;
+            if (supabase) {
+                const [pRes, nRes, sRes] = await Promise.all([
+                    supabase.from('products').select('*'),
+                    supabase.from('notifications').select('*').order('timestamp', { ascending: false }).limit(50),
+                    supabase.from('settings').select('*').eq('id', 1).single()
+                ]);
+
+                if (pRes.data) this.products = pRes.data;
+                if (nRes.data) this.notifications = nRes.data;
+                if (sRes.data) this.settings = sRes.data;
+            } else {
+                const [p, n, s] = await Promise.all([
+                    fetch(`${BACKEND_URL}/api/products`).then(r => r.json()),
+                    fetch(`${BACKEND_URL}/api/notifications`).then(r => r.json()),
+                    fetch(`${BACKEND_URL}/api/settings`).then(r => r.json())
+                ]);
+                this.products = p;
+                this.notifications = n;
+                this.settings = s;
+            }
+            
             this.saveLocal();
             UI.render();
             this.startGenerator();
-        } catch (e) { console.warn('Fetch sync falhou (Offline)'); }
+
+            if (State.isPC) {
+                fetch(`${BACKEND_URL}/api/info`).then(r => r.json()).then(d => {
+                    State._ips = d.ips;
+                    if (UI.currentView === 'settings' || UI.currentView === 'dashboard') UI.render();
+                }).catch(() => {});
+            }
+        } catch (e) { 
+            console.warn('Sincronização Cloud falhou, operando local.');
+            // Tenta carregar do local storage se falhar
+            this.products = JSON.parse(localStorage.getItem('bunny_products')) || [];
+            this.notifications = JSON.parse(localStorage.getItem('bunny_notifications')) || [];
+            UI.render();
+        }
     },
 
     async addProduct(name, value) {
@@ -147,12 +184,15 @@ const State = {
         const product = { id, name, value: parseFloat(value), is_active: 1 };
 
         try {
-            const response = await fetch(`${BACKEND_URL}/api/products`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(product)
-            });
-            if (response.ok) return;
+            if (supabase) {
+                await supabase.from('products').insert([product]);
+            } else {
+                await fetch(`${BACKEND_URL}/api/products`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(product)
+                });
+            }
         } catch (e) { console.warn('Erro ao salvar produto'); }
         
         this.products.unshift(product);
@@ -500,13 +540,6 @@ const UI = {
                 }
             }, 100);
 
-            if (State.isPC && !State._ips) {
-                fetch(`${BACKEND_URL}/api/info`).then(r => r.json()).then(d => {
-                    State._ips = d.ips;
-                    UI.render();
-                }).catch(() => {});
-            }
-
             return `
                 <div class="animate-enter" style="padding-top:40px; padding-bottom:80px">
                     <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px">
@@ -710,17 +743,22 @@ const UI = {
                         <button class="btn-luxe btn-primary" onclick="Actions.saveBalanceAdj()">Salvar Correção</button>
                     </div>
 
-                    <div class="card-luxe" style="margin-bottom:20px; border:1px solid var(--error)">
+                     <div class="card-luxe" style="margin-bottom:20px; border:1px solid var(--error)">
                         <h4 class="outfit" style="margin-bottom:10px; color:var(--error)">Zerar Dashboard</h4>
                         <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Apaga todo o histórico de vendas e notificações. Produtos não são afetados.</p>
                         <button class="btn-luxe btn-secondary" style="color:var(--error)" onclick="Actions.resetDashboard()">Zerar Agora</button>
                     </div>
                     ` : `
                     <div class="card-luxe" style="margin-bottom:20px">
-                        <h4 class="outfit" style="margin-bottom:6px">IP do Servidor (PC)</h4>
-                        <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Digite o IP do PC para sincronizar as notificações.</p>
+                        <h4 class="outfit" style="margin-bottom:6px">Conectar ao PC</h4>
+                        <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Digite o código que aparece no seu computador (Perfil).</p>
+                        <input type="text" id="sync-code" class="input-luxe" placeholder="Ex: MTI5LjE2OC..." style="margin-bottom:12px; text-transform:uppercase">
+                        <button class="btn-luxe btn-primary" onclick="Actions.syncWithCode()">Sincronizar Agora</button>
+                        
+                        <div style="margin: 20px 0; text-align:center; opacity:0.3">OU USE O IP</div>
+                        
                         <input type="text" id="srv-ip" class="input-luxe" placeholder="Ex: 192.168.1.10" value="${localStorage.getItem('bunny_server_ip') || ''}" style="margin-bottom:12px">
-                        <button class="btn-luxe btn-primary" onclick="Actions.saveServerIp()">Conectar ao PC</button>
+                        <button class="btn-luxe btn-secondary" onclick="Actions.saveServerIp()">Salvar IP</button>
                     </div>
                     `}
                     
@@ -885,6 +923,19 @@ const Actions = {
         setTimeout(() => location.reload(), 1000);
     },
 
+    syncWithCode() {
+        const code = document.getElementById('sync-code').value.trim();
+        if (!code) return alert('Digite o código.');
+        const ip = Sync.parseCode(code);
+        if (ip && ip.split('.').length === 4) {
+            localStorage.setItem('bunny_server_ip', ip);
+            UI.showToast('✅ Sincronizado! Reiniciando...');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            alert('Código inválido. Verifique no computador.');
+        }
+    },
+
     async toggleProdStatus(id, is_active) {
         try {
             await fetch(`${BACKEND_URL}/api/products/${id}`, {
@@ -929,7 +980,11 @@ const Actions = {
     async deleteProd(id) {
         if (!confirm('Excluir este produto?')) return;
         try {
-            await fetch(`${BACKEND_URL}/api/products/${id}`, { method: 'DELETE' });
+            if (supabase) {
+                await supabase.from('products').delete().eq('id', id);
+            } else {
+                await fetch(`${BACKEND_URL}/api/products/${id}`, { method: 'DELETE' });
+            }
         } catch (e) {
             State.products = State.products.filter(p => p.id !== id);
             State.saveLocal();
@@ -944,11 +999,15 @@ const Actions = {
         State.startGenerator();
         
         try {
-            await fetch(`${BACKEND_URL}/api/settings`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newSettings)
-            });
+            if (supabase) {
+                await supabase.from('settings').update(newSettings).eq('id', 1);
+            } else {
+                await fetch(`${BACKEND_URL}/api/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newSettings)
+                });
+            }
         } catch (e) { console.warn('Offline settings sync'); }
     },
 
