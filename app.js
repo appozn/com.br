@@ -108,7 +108,9 @@ const State = {
         const title = isWithdraw ? 'Saque Realizado!' : (type === 'pix' ? 'Pix Gerado!' : 'Venda Aprovada!');
         
         // Ajuste para Brasília (UTC-3)
-        const brTime = new Date(new Date().getTime() - (3 * 3600000));
+        const now = new Date();
+        const offset = -3; // Brasília
+        const brTime = new Date(now.getTime() + (offset * 3600000));
         const timestamp = customTimestamp || brTime.toISOString();
 
         // Tentar enviar para o backend
@@ -208,8 +210,8 @@ const System = {
             try {
                 window.swRegistration.showNotification("OZN PAY", {
                     body: `${notif.title}\nValor: ${amount}`,
-                    icon: 'logo.png',
-                    badge: 'logo.png',
+                    icon: 'logo.png?v=10',
+                    badge: 'logo.png?v=10',
                     vibrate: [200, 100, 200],
                     tag: 'ozn-sale',
                     requireInteraction: true
@@ -330,9 +332,8 @@ const UI = {
         login() {
             return `
                 <div class="animate-enter" style="padding-top:80px; text-align:center">
-                    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:25px">
-                        <img src="logo.png" alt="OZN PAY" style="width:100px; height:100px; object-fit:contain; margin-bottom:15px; filter:drop-shadow(0 4px 12px rgba(0, 122, 255, 0.2))">
-                        <h1 class="outfit" style="font-size:2rem">OZN<span style="opacity:0.3">PAY</span></h1>
+                    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:30px">
+                        <img src="logo.png?v=10" alt="OZN PAY" style="width:140px; height:140px; object-fit:contain; filter:drop-shadow(0 4px 20px rgba(160, 32, 240, 0.3))">
                     </div>
                     <div class="card-luxe" style="text-align:left">
                         <input type="text" id="email" class="input-luxe" value="admin@ozn.app" style="margin-bottom:12px">
@@ -401,8 +402,9 @@ const UI = {
 
             return `
                 <div class="animate-enter" style="padding-top:40px; padding-bottom:80px">
-                    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:30px">
-                        <img src="logo.png" alt="OZN PAY" style="width:60px; height:60px; object-fit:contain; margin-bottom:10px">
+                    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px">
+                        <img src="logo.png?v=10" alt="OZN PAY" style="width:80px; height:80px; object-fit:contain; filter:drop-shadow(0 4px 15px rgba(160, 32, 240, 0.2))">
+                    </div>
                         <div style="display:flex; justify-content:space-between; width:100%">
                             <h2 class="outfit">Dashboard</h2>
                             <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
@@ -474,7 +476,7 @@ const UI = {
                             ${State.products.map(p => `<option value="${p.value}" ${localStorage.getItem('ozn_last_prod') == p.value ? 'selected' : ''}>${p.name}</option>`).join('')}
                         </select>
                         <input type="number" id="val-m" class="input-luxe" placeholder="R$ 0,00" value="${localStorage.getItem('ozn_last_val') || ''}" style="margin-bottom:12px">
-                        <input type="date" id="sale-date" class="input-luxe" value="${localStorage.getItem('ozn_last_date') || new Date(new Date().getTime() - (3 * 3600000)).toISOString().split('T')[0]}" style="margin-bottom:20px">
+                        <input type="date" id="sale-date" class="input-luxe" value="${new Date(new Date().getTime() - 10800000).toISOString().split('T')[0]}" style="margin-bottom:20px">
                         <div style="display:flex; gap:10px">
                             <button class="btn-luxe btn-secondary" onclick="Actions.gen('pix')">Pix Aberto</button>
                             <button class="btn-luxe btn-primary" onclick="Actions.gen('sale')">Aprovada</button>
@@ -550,14 +552,13 @@ const Actions = {
         const sp = document.getElementById('sel-p').value;
         const vm = document.getElementById('val-m').value;
         const val = sp || vm;
-        const dateInput = document.getElementById('sale-date');
-
+        
         // Persistir escolha
         localStorage.setItem('ozn_last_prod', sp);
         localStorage.setItem('ozn_last_val', vm);
-        localStorage.setItem('ozn_last_date', dateInput?.value || '');
 
-        const saleDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date(new Date().getTime() - (3 * 3600000)).toISOString();
+        const dateInput = document.getElementById('sale-date');
+        const saleDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date(new Date().getTime() - 10800000).toISOString();
 
         if (!val) {
             alert('Insira um valor.');
@@ -640,7 +641,7 @@ const Actions = {
 };
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').then(reg => { window.swRegistration = reg; });
+    navigator.serviceWorker.register('sw.js?v=2').then(reg => { window.swRegistration = reg; });
 }
 
 window.UI = UI; window.Auth = Auth; window.Actions = Actions; window.System = System;
