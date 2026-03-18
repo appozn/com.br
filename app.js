@@ -108,9 +108,7 @@ const State = {
         const title = isWithdraw ? 'Saque Realizado!' : (type === 'pix' ? 'Pix Gerado!' : 'Venda Aprovada!');
         
         // Ajuste para Brasília (UTC-3)
-        const now = new Date();
-        const offset = -3; // Brasília
-        const brTime = new Date(now.getTime() + (offset * 3600000));
+        const brTime = new Date(new Date().getTime() - (3 * 3600000));
         const timestamp = customTimestamp || brTime.toISOString();
 
         // Tentar enviar para o backend
@@ -476,7 +474,7 @@ const UI = {
                             ${State.products.map(p => `<option value="${p.value}" ${localStorage.getItem('ozn_last_prod') == p.value ? 'selected' : ''}>${p.name}</option>`).join('')}
                         </select>
                         <input type="number" id="val-m" class="input-luxe" placeholder="R$ 0,00" value="${localStorage.getItem('ozn_last_val') || ''}" style="margin-bottom:12px">
-                        <input type="date" id="sale-date" class="input-luxe" value="${new Date(new Date().getTime() - 10800000).toISOString().split('T')[0]}" style="margin-bottom:20px">
+                        <input type="date" id="sale-date" class="input-luxe" value="${localStorage.getItem('ozn_last_date') || new Date(new Date().getTime() - (3 * 3600000)).toISOString().split('T')[0]}" style="margin-bottom:20px">
                         <div style="display:flex; gap:10px">
                             <button class="btn-luxe btn-secondary" onclick="Actions.gen('pix')">Pix Aberto</button>
                             <button class="btn-luxe btn-primary" onclick="Actions.gen('sale')">Aprovada</button>
@@ -552,13 +550,14 @@ const Actions = {
         const sp = document.getElementById('sel-p').value;
         const vm = document.getElementById('val-m').value;
         const val = sp || vm;
-        
+        const dateInput = document.getElementById('sale-date');
+
         // Persistir escolha
         localStorage.setItem('ozn_last_prod', sp);
         localStorage.setItem('ozn_last_val', vm);
+        localStorage.setItem('ozn_last_date', dateInput?.value || '');
 
-        const dateInput = document.getElementById('sale-date');
-        const saleDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date(new Date().getTime() - 10800000).toISOString();
+        const saleDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date(new Date().getTime() - (3 * 3600000)).toISOString();
 
         if (!val) {
             alert('Insira um valor.');
