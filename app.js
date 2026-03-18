@@ -527,10 +527,10 @@ const UI = {
                             <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
                         </div>
                     </div>
-                    <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(130,10,209,0.05), transparent); position:relative;">
-                        <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:8px 16px; font-size:0.8rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
-                        <p style="opacity:0.6; font-size:0.85rem; margin-bottom:4px;">Saldo Disponível para Saque</p>
-                        <h3 class="outfit" style="font-size:2.4rem; margin-bottom:20px;">R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                    <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(130,10,209,0.05), transparent); position:relative; overflow:hidden;">
+                        <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:6px 12px; font-size:0.75rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
+                        <p style="opacity:0.6; font-size:0.8rem; margin-bottom:4px;">Saldo Disponível</p>
+                        <h3 class="outfit balance-amount" style="font-size:2.2rem; margin-bottom:20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                         <div style="height: 120px; width: 100%; position: relative;">
                             <canvas id="salesChart"></canvas>
                         </div>
@@ -708,14 +708,7 @@ const UI = {
                 <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
                     <h2 class="outfit" style="margin-bottom:40px">Configurações</h2>
                     
-                    <div class="card-luxe" style="margin-bottom:20px; border: 1px solid rgba(255,255,255,0.05); text-align: center; padding: 30px 20px;">
-                        <i data-lucide="bell-ring" style="width:40px; height:40px; color:var(${Notification.permission === 'granted' ? '--success' : '--primary'}); margin-bottom:15px"></i>
-                        <h3 class="outfit" style="margin-bottom:10px">Status do Fluxo</h3>
-                        <p style="font-size:0.85rem; opacity:0.6; margin-bottom:20px;">
-                            ${Notification.permission === 'granted' ? 'Notificações estão Ativas! ✅' : 'Ative para começar a receber vendas agora.'}
-                        </p>
-                        ${Notification.permission !== 'granted' ? `<button class="btn-luxe btn-primary" onclick="Actions.startPulse()" style="padding:12px">Ativar Notificações 🚀</button>` : ''}
-                    </div>
+
 
                     ${State.isPC ? `
                     <div class="card-luxe" style="margin-bottom:20px">
@@ -928,8 +921,12 @@ const Actions = {
 
     async deleteProd(id) {
         if (!confirm('Excluir este produto?')) return;
-        State.products = State.products.filter(p => p.id !== id);
-        State.saveLocal();
+        try {
+            await fetch(`${BACKEND_URL}/api/products/${id}`, { method: 'DELETE' });
+        } catch (e) {
+            State.products = State.products.filter(p => p.id !== id);
+            State.saveLocal();
+        }
         UI.render();
     },
 
