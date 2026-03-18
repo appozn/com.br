@@ -106,7 +106,12 @@ const State = {
         const fee = isWithdraw ? 0 : parseFloat(((gross * 0.0599) + 2.49).toFixed(2));
         const net = isWithdraw ? -gross : parseFloat((gross - fee).toFixed(2));
         const title = isWithdraw ? 'Saque Realizado!' : (type === 'pix' ? 'Pix Gerado!' : 'Venda Aprovada!');
-        const timestamp = customTimestamp || new Date().toISOString();
+        
+        // Ajuste para Brasília (UTC-3)
+        const now = new Date();
+        const offset = -3; // Brasília
+        const brTime = new Date(now.getTime() + (offset * 3600000));
+        const timestamp = customTimestamp || brTime.toISOString();
 
         // Tentar enviar para o backend
         try {
@@ -191,7 +196,7 @@ const System = {
             <div class="push-icon"><i data-lucide="${notif.type === 'pix' ? 'qr-code' : 'zap'}"></i></div>
             <div class="push-content">
                 <h5>OZN PAY</h5>
-                <p><b>${notif.title}</b><br>Líquido: R$ ${Number(notif.net || 0).toFixed(2)}</p>
+                <p><b>${notif.title}</b><br>Valor: ${Number(notif.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
         `;
         overlay.prepend(b);
@@ -200,11 +205,11 @@ const System = {
     },
 
     sendPush(notif) {
-        const amount = Math.abs(Number(notif.net || 0)).toFixed(2);
+        const amount = Math.abs(Number(notif.net || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         if (window.swRegistration && Notification.permission === "granted") {
             try {
-                window.swRegistration.showNotification("OZN PAY 💎", {
-                    body: `${notif.title}\n+ R$ ${amount}`,
+                window.swRegistration.showNotification("OZN PAY", {
+                    body: `${notif.title}\nValor: ${amount}`,
                     icon: 'logo.png',
                     badge: 'logo.png',
                     vibrate: [200, 100, 200],
@@ -218,7 +223,7 @@ const System = {
         if (Notification.permission === "granted") {
             try {
                 new Notification("OZN PAY", {
-                    body: `${notif.title}\n+ R$ ${amount}`,
+                    body: `${notif.title}\nValor: ${amount}`,
                     icon: 'logo.png'
                 });
             } catch (e) { console.error("Notificação nativa falhou", e); }
@@ -283,7 +288,7 @@ const UI = {
                 <div class="push-icon"><i data-lucide="${n.type === 'pix' ? 'qr-code' : 'zap'}"></i></div>
                 <div class="push-content">
                     <h5>OZN PAY</h5>
-                    <p><b>${n.title}</b><br>R$ ${Number(n.net || 0).toFixed(2)}</p>
+                    <p><b>${n.title}</b><br>Valor: ${Number(n.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
             </div>
         `).join('');
@@ -326,8 +331,11 @@ const UI = {
     views: {
         login() {
             return `
-                <div class="animate-enter" style="padding-top:100px; text-align:center">
-                    <h1 class="outfit" style="font-size:3rem; margin-bottom:40px">OZN<span style="opacity:0.3">PAY</span></h1>
+                <div class="animate-enter" style="padding-top:80px; text-align:center">
+                    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:25px">
+                        <img src="logo.png" alt="OZN PAY" style="width:100px; height:100px; object-fit:contain; margin-bottom:15px; filter:drop-shadow(0 4px 12px rgba(0, 122, 255, 0.2))">
+                        <h1 class="outfit" style="font-size:2rem">OZN<span style="opacity:0.3">PAY</span></h1>
+                    </div>
                     <div class="card-luxe" style="text-align:left">
                         <input type="text" id="email" class="input-luxe" value="admin@ozn.app" style="margin-bottom:12px">
                         <input type="password" id="pass" class="input-luxe" value="12345" style="margin-bottom:20px">
@@ -394,10 +402,13 @@ const UI = {
             }, 100);
 
             return `
-                <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:40px">
-                        <h2 class="outfit">Dashboard</h2>
-                        <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
+                <div class="animate-enter" style="padding-top:40px; padding-bottom:80px">
+                    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:30px">
+                        <img src="logo.png" alt="OZN PAY" style="width:60px; height:60px; object-fit:contain; margin-bottom:10px">
+                        <div style="display:flex; justify-content:space-between; width:100%">
+                            <h2 class="outfit">Dashboard</h2>
+                            <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
+                        </div>
                     </div>
                     <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(0,122,255,0.05), transparent); position:relative;">
                         <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:8px 16px; font-size:0.8rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
@@ -413,7 +424,7 @@ const UI = {
                     ${State.notifications.slice(0, 5).map(n => `
                         <div class="ntf-card">
                             <b>${n.title}</b><br>
-                            <span style="color:var(--success)">+ R$ ${Math.abs(Number(n.net)).toFixed(2)}</span>
+                            <span style="color:var(--success)">Valor: ${Math.abs(Number(n.net)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             <span style="float:right; opacity:0.4; font-size:0.75rem">${n.timestamp ? new Date(n.timestamp).toLocaleDateString('pt-BR') : ''}</span>
                         </div>
                     `).join('')}
@@ -431,7 +442,7 @@ const UI = {
                     </div>
                     ${State.products.map(p => `
                         <div class="card-luxe" style="margin-bottom:12px; padding:16px">
-                            <b>${p.name}</b><br>R$ ${Number(p.value).toFixed(2)}
+                            <b>${p.name}</b><br>Valor: ${Number(p.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                     `).join('')}
                 </div>
@@ -445,7 +456,7 @@ const UI = {
                     ${State.notifications.map(n => `
                         <div class="ntf-card">
                             <b>${n.title}</b><br>
-                            <span style="color:var(--success)">+ R$ ${Math.abs(Number(n.net)).toFixed(2)}</span>
+                            <span style="color:var(--success)">Valor: ${Math.abs(Number(n.net)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             <span style="float:right; opacity:0.4; font-size:0.75rem">${n.timestamp ? new Date(n.timestamp).toLocaleDateString('pt-BR') : ''}</span>
                         </div>
                     `).join('')}
@@ -462,10 +473,10 @@ const UI = {
                         <h4 class="outfit" style="margin-bottom:20px; color:var(--primary)">+ Gerar Venda Teste</h4>
                         <select id="sel-p" class="input-luxe" style="margin-bottom:12px">
                             <option value="">Valor Manual</option>
-                            ${State.products.map(p => `<option value="${p.value}">${p.name}</option>`).join('')}
+                            ${State.products.map(p => `<option value="${p.value}" ${localStorage.getItem('ozn_last_prod') == p.value ? 'selected' : ''}>${p.name}</option>`).join('')}
                         </select>
-                        <input type="number" id="val-m" class="input-luxe" placeholder="R$ 0,00" style="margin-bottom:12px">
-                        <input type="date" id="sale-date" class="input-luxe" value="${new Date().toISOString().split('T')[0]}" style="margin-bottom:20px">
+                        <input type="number" id="val-m" class="input-luxe" placeholder="R$ 0,00" value="${localStorage.getItem('ozn_last_val') || ''}" style="margin-bottom:12px">
+                        <input type="date" id="sale-date" class="input-luxe" value="${new Date(new Date().getTime() - 10800000).toISOString().split('T')[0]}" style="margin-bottom:20px">
                         <div style="display:flex; gap:10px">
                             <button class="btn-luxe btn-secondary" onclick="Actions.gen('pix')">Pix Aberto</button>
                             <button class="btn-luxe btn-primary" onclick="Actions.gen('sale')">Aprovada</button>
@@ -541,8 +552,13 @@ const Actions = {
         const sp = document.getElementById('sel-p').value;
         const vm = document.getElementById('val-m').value;
         const val = sp || vm;
+        
+        // Persistir escolha
+        localStorage.setItem('ozn_last_prod', sp);
+        localStorage.setItem('ozn_last_val', vm);
+
         const dateInput = document.getElementById('sale-date');
-        const saleDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date().toISOString();
+        const saleDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date(new Date().getTime() - 10800000).toISOString();
 
         if (!val) {
             alert('Insira um valor.');
@@ -558,7 +574,7 @@ const Actions = {
     async withdraw(event) {
         const net = State.notifications.reduce((a, b) => a + (Number(b.net) || 0), 0);
         if (net <= 0) return alert('Sem saldo disponível.');
-        const pct = prompt(`Saldo disponível: R$ ${net.toFixed(2)}\n\nQuanto deseja sacar? (Apenas números)`);
+        const pct = prompt(`Saldo disponível: ${net.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\nQuanto deseja sacar? (Apenas números)`);
         if (!pct) return;
         const val = parseFloat(pct.replace(',', '.'));
         if (isNaN(val) || val <= 0) return alert('Valor inválido.');

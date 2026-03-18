@@ -49,4 +49,4 @@
 
 ---
 
-**PRONTO! Agora você tem um sistema profissional de notificações!** 🚀💎
+**PRONTO! Agora você tem um sistema profissional de notificações!** 🚀
