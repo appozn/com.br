@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo   OZN PAY - INICIANDO SERVIDOR
+echo   Bunny Pay - INICIANDO SERVIDOR
 echo ========================================
 echo.
 

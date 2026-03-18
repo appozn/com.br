@@ -1,7 +1,7 @@
 :root {
   --bg-dark: #030305;
   --bg-card: rgba(255, 255, 255, 0.03);
-  --primary: #007AFF;
+  --primary: #820AD1;
   --success: #30D158;
   --error: #FF453A;
   --text-main: #FFFFFF;
@@ -29,7 +29,7 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 10% 10%, rgba(0, 122, 255, 0.1), transparent 40%);
+  background: radial-gradient(circle at 10% 10%, rgba(130, 10, 209, 0.1), transparent 40%);
   z-index: -1;
 }
 

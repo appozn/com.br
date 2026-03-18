@@ -2,7 +2,7 @@
 cls
 color 0A
 echo ===================================================
-echo       OZN PAY - SISTEMA DE INICIALIZACAO
+echo       Bunny Pay - SISTEMA DE INICIALIZACAO
 echo ===================================================
 echo.
 
@@ -14,7 +14,7 @@ if %errorlevel% neq 0 (
     echo.
     echo [ERRO CRITICO] NODE.JS NAO ENCONTRADO!
     echo.
-    echo O OZN PAY precisa do Node.js para o banco de dados e notificacoes.
+    echo O Bunny Pay precisa do Node.js para o banco de dados e notificacoes.
     echo.
     echo 1. Baixe o Node.js: https://nodejs.org
     echo 2. Instale (clique em "Next" ate o fim)
@@ -46,7 +46,7 @@ echo    Seu IP Local: %IP%
 echo.
 
 :: 4. Iniciar Servidor
-echo [4/4] Iniciando Servidor OZN PAY...
+echo [4/4] Iniciando Servidor Bunny Pay...
 echo.
 echo ===================================================
 echo    STATUS: ONLINE

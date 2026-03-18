@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo     OZN PAY - Servidor Local
+echo     Bunny Pay - Servidor Local
 echo ========================================
 echo.
 echo Iniciando servidor HTTP na porta 8080...

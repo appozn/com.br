@@ -79,7 +79,7 @@ app.post('/api/login', async (req, res) => {
 // HTTP Server
 const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('╔════════════════════════════════════════╗');
-    console.log('║     OZN PAY - Servidor Iniciado       ║');
+    console.log('║    Bunny Pay - Servidor Iniciado      ║');
     console.log('╚════════════════════════════════════════╝');
     console.log('');
     console.log(`🌐 Acesse no computador: http://localhost:${PORT}`);

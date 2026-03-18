@@ -1,7 +1,7 @@
 {
-    "name": "ozn-pay-server",
+    "name": "bunny-pay-server",
     "version": "1.0.0",
-    "description": "OZN PAY Backend Server",
+    "description": "Bunny Pay Backend Server",
     "main": "server.js",
     "scripts": {
         "start": "node server.js",

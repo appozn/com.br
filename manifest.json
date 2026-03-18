@@ -1,6 +1,6 @@
 {
-  "name": "OZN PAY Gateway",
-  "short_name": "OZN PAY",
+  "name": "Bunny Pay Gateway",
+  "short_name": "Bunny Pay",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#030305",

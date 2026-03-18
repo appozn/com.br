@@ -1,7 +1,7 @@
-// OZN PAY - Platform Engine v5.7
-if (!localStorage.getItem('ozn_wiped_v57')) {
+// Bunny Pay - Platform Engine v5.7
+if (!localStorage.getItem('bunny_wiped_v57')) {
     localStorage.clear();
-    localStorage.setItem('ozn_wiped_v57', 'true');
+    localStorage.setItem('bunny_wiped_v57', 'true');
 }
 window.onerror = function (msg, url, line, col, error) {
     alert(`ERRO CRÍTICO DO SISTEMA:\n${msg}\nLinha: ${line}`);
@@ -94,9 +94,9 @@ if (location.protocol !== 'file:') {
 }
 
 const State = {
-    user: JSON.parse(localStorage.getItem('ozn_user')) || null,
-    products: JSON.parse(localStorage.getItem('ozn_products')) || [],
-    notifications: JSON.parse(localStorage.getItem('ozn_notifications')) || [],
+    user: JSON.parse(localStorage.getItem('bunny_user')) || null,
+    products: JSON.parse(localStorage.getItem('bunny_products')) || [],
+    notifications: JSON.parse(localStorage.getItem('bunny_notifications')) || [],
     currentView: 'dashboard',
     isLocked: false,
 
@@ -163,8 +163,8 @@ const State = {
     },
 
     saveLocal() {
-        localStorage.setItem('ozn_products', JSON.stringify(this.products));
-        localStorage.setItem('ozn_notifications', JSON.stringify(this.notifications));
+        localStorage.setItem('bunny_products', JSON.stringify(this.products));
+        localStorage.setItem('bunny_notifications', JSON.stringify(this.notifications));
     }
 };
 
@@ -208,7 +208,7 @@ const System = {
         const amount = Math.abs(Number(notif.net || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         if (window.swRegistration && Notification.permission === "granted") {
             try {
-                window.swRegistration.showNotification("OZN PAY", {
+                window.swRegistration.showNotification("Bunny Pay", {
                     body: `${notif.title}\nValor: ${amount}`,
                     icon: 'logo.png?v=10',
                     badge: 'logo.png?v=10',
@@ -222,7 +222,7 @@ const System = {
 
         if (Notification.permission === "granted") {
             try {
-                new Notification("OZN PAY", {
+                new Notification("Bunny Pay", {
                     body: `${notif.title}\nValor: ${amount}`,
                     icon: 'logo.png'
                 });
@@ -287,14 +287,14 @@ const UI = {
             <div class="push-banner" style="transform:none; animation:none; margin-bottom:10px">
                 <div class="push-icon"><i data-lucide="${n.type === 'pix' ? 'qr-code' : 'zap'}"></i></div>
                 <div class="push-content">
-                    <h5>OZN PAY</h5>
+                    <h5>Bunny Pay</h5>
                     <p><b>${n.title}</b><br>Valor: ${Number(n.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
             </div>
         `).join('');
 
         lock.innerHTML = `
-            <div class="status-bar"><span>OZN 5G</span><i data-lucide="wifi"></i></div>
+            <div class="status-bar"><span>Bunny 5G</span><i data-lucide="wifi"></i></div>
             <div class="lock-time" style="font-size:4rem; margin-top:40px">${time}</div>
             <div class="lock-date">${date}</div>
             <div style="width:100%; padding:20px; overflow-y:auto; flex:1">${list || '<p style="text-align:center; opacity:0.2">Aguardando...</p>'}</div>
@@ -333,10 +333,10 @@ const UI = {
             return `
                 <div class="animate-enter" style="padding-top:80px; text-align:center">
                     <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:30px">
-                        <img src="logo.png?v=10" alt="OZN PAY" style="width:140px; height:140px; object-fit:contain; filter:drop-shadow(0 4px 20px rgba(160, 32, 240, 0.3))">
+                        <img src="logo.png?v=10" alt="Bunny Pay" style="width:140px; height:140px; object-fit:contain; filter:drop-shadow(0 4px 20px rgba(130, 10, 209, 0.3))">
                     </div>
                     <div class="card-luxe" style="text-align:left">
-                        <input type="text" id="email" class="input-luxe" value="admin@ozn.app" style="margin-bottom:12px">
+                        <input type="text" id="email" class="input-luxe" value="admin@bunny.app" style="margin-bottom:12px">
                         <input type="password" id="pass" class="input-luxe" value="12345" style="margin-bottom:20px">
                         <button class="btn-luxe btn-primary" onclick="Auth.login()">Entrar</button>
                     </div>
@@ -345,7 +345,7 @@ const UI = {
         },
         dashboard() {
             const net = State.notifications.reduce((a, b) => a + (Number(b.net) || 0), 0);
-            const balanceAdj = Number(localStorage.getItem('ozn_balance_adj') || 0);
+            const balanceAdj = Number(localStorage.getItem('bunny_balance_adj') || 0);
             const totalBalance = parseFloat((net + balanceAdj).toFixed(2));
 
             // Build last-7-days chart data from real notification timestamps
@@ -379,12 +379,12 @@ const UI = {
                             datasets: [{
                                 label: 'Vendas (R$)',
                                 data: chartData,
-                                borderColor: '#007AFF',
+                                borderColor: '#820AD1',
                                 tension: 0.4,
-                                backgroundColor: 'rgba(0,122,255,0.1)',
+                                backgroundColor: 'rgba(130,10,209,0.1)',
                                 fill: true,
                                 pointRadius: 3,
-                                pointBackgroundColor: '#007AFF'
+                                pointBackgroundColor: '#820AD1'
                             }]
                         },
                         options: {
@@ -403,14 +403,14 @@ const UI = {
             return `
                 <div class="animate-enter" style="padding-top:40px; padding-bottom:80px">
                     <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px">
-                        <img src="logo.png?v=10" alt="OZN PAY" style="width:80px; height:80px; object-fit:contain; filter:drop-shadow(0 4px 15px rgba(160, 32, 240, 0.2))">
+                        <img src="logo.png?v=10" alt="Bunny Pay" style="width:80px; height:80px; object-fit:contain; filter:drop-shadow(0 4px 15px rgba(130, 10, 209, 0.2))">
                     </div>
                         <div style="display:flex; justify-content:space-between; width:100%">
                             <h2 class="outfit">Dashboard</h2>
                             <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
                         </div>
                     </div>
-                    <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(0,122,255,0.05), transparent); position:relative;">
+                    <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(130,10,209,0.05), transparent); position:relative;">
                         <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:8px 16px; font-size:0.8rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
                         <p style="opacity:0.6; font-size:0.85rem; margin-bottom:4px;">Saldo Disponível para Saque</p>
                         <h3 class="outfit" style="font-size:2.4rem; margin-bottom:20px;">R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
@@ -464,7 +464,7 @@ const UI = {
             `;
         },
         settings() {
-            const balanceAdj = Number(localStorage.getItem('ozn_balance_adj') || 0);
+            const balanceAdj = Number(localStorage.getItem('bunny_balance_adj') || 0);
             return `
                 <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
                     <h2 class="outfit" style="margin-bottom:40px">Configurações</h2>
@@ -473,9 +473,9 @@ const UI = {
                         <h4 class="outfit" style="margin-bottom:20px; color:var(--primary)">+ Gerar Venda Teste</h4>
                         <select id="sel-p" class="input-luxe" style="margin-bottom:12px">
                             <option value="">Valor Manual</option>
-                            ${State.products.map(p => `<option value="${p.value}" ${localStorage.getItem('ozn_last_prod') == p.value ? 'selected' : ''}>${p.name}</option>`).join('')}
+                            ${State.products.map(p => `<option value="${p.value}" ${localStorage.getItem('bunny_last_prod') == p.value ? 'selected' : ''}>${p.name}</option>`).join('')}
                         </select>
-                        <input type="number" id="val-m" class="input-luxe" placeholder="R$ 0,00" value="${localStorage.getItem('ozn_last_val') || ''}" style="margin-bottom:12px">
+                        <input type="number" id="val-m" class="input-luxe" placeholder="R$ 0,00" value="${localStorage.getItem('bunny_last_val') || ''}" style="margin-bottom:12px">
                         <input type="date" id="sale-date" class="input-luxe" value="${new Date(new Date().getTime() - 10800000).toISOString().split('T')[0]}" style="margin-bottom:20px">
                         <div style="display:flex; gap:10px">
                             <button class="btn-luxe btn-secondary" onclick="Actions.gen('pix')">Pix Aberto</button>
@@ -497,7 +497,7 @@ const UI = {
                     </div>
                     
                     <button class="btn-luxe btn-secondary" onclick="Auth.logout()" style="color:var(--error); margin-bottom: 20px;">Sair da Conta</button>
-                    <p style="text-align:center; opacity:0.3; font-size:0.7rem">OZN PAY v5.7</p>
+                    <p style="text-align:center; opacity:0.3; font-size:0.7rem">Bunny Pay v5.7</p>
                 </div>
             `;
         }
@@ -524,13 +524,13 @@ const Auth = {
             });
             clearTimeout(timeoutId);
 
-            localStorage.setItem('ozn_user', JSON.stringify({ email }));
+            localStorage.setItem('bunny_user', JSON.stringify({ email }));
             State.user = { email };
             UI.render();
         } catch (e) {
             console.error('Servidor offline. Login feito localmente.');
             State.user = { email };
-            localStorage.setItem('ozn_user', JSON.stringify({ email }));
+            localStorage.setItem('bunny_user', JSON.stringify({ email }));
             UI.render();
         } finally {
             if (btn) {
@@ -539,7 +539,7 @@ const Auth = {
             }
         }
     },
-    logout() { State.user = null; localStorage.removeItem('ozn_user'); UI.render(); }
+    logout() { State.user = null; localStorage.removeItem('bunny_user'); UI.render(); }
 };
 
 const Actions = {
@@ -554,8 +554,8 @@ const Actions = {
         const val = sp || vm;
         
         // Persistir escolha
-        localStorage.setItem('ozn_last_prod', sp);
-        localStorage.setItem('ozn_last_val', vm);
+        localStorage.setItem('bunny_last_prod', sp);
+        localStorage.setItem('bunny_last_val', vm);
 
         const dateInput = document.getElementById('sale-date');
         const saleDate = dateInput && dateInput.value ? new Date(dateInput.value + 'T12:00:00').toISOString() : new Date(new Date().getTime() - 10800000).toISOString();
@@ -625,7 +625,7 @@ const Actions = {
     saveBalanceAdj() {
         const val = parseFloat(document.getElementById('bal-adj').value);
         if (isNaN(val)) return alert('Digite um valor válido. Use negativo para subtrair.');
-        localStorage.setItem('ozn_balance_adj', val.toFixed(2));
+        localStorage.setItem('bunny_balance_adj', val.toFixed(2));
         UI.showToast('✅ Correção de saldo salva!');
         UI.render();
     },
@@ -633,7 +633,7 @@ const Actions = {
     resetDashboard() {
         if (!confirm('Zerar todo o histórico de vendas e notificações?')) return;
         State.notifications = [];
-        localStorage.removeItem('ozn_balance_adj');
+        localStorage.removeItem('bunny_balance_adj');
         State.saveLocal();
         UI.showToast('✅ Dashboard zerada!');
         UI.render();

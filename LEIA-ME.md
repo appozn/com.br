@@ -10,7 +10,7 @@
 
 1. Abra o navegador no **computador**
 2. Acesse: `http://localhost:3000`
-3. Faça login (admin@ozn.app / 12345)
+3. Faça login (admin@bunny.app / 12345)
 
 ## Passo 3: Acessar no Celular
 
