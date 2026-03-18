@@ -1,8 +1,7 @@
-const savedIp = localStorage.getItem('bunny_server_ip');
-if (!localStorage.getItem('bunny_wiped_v58')) {
+// Bunny Pay - Platform Engine v5.7
+if (!localStorage.getItem('bunny_wiped_v57')) {
     localStorage.clear();
-    if (savedIp) localStorage.setItem('bunny_server_ip', savedIp);
-    localStorage.setItem('bunny_wiped_v58', 'true');
+    localStorage.setItem('bunny_wiped_v57', 'true');
 }
 window.onerror = function (msg, url, line, col, error) {
     alert(`ERRO CRÍTICO DO SISTEMA:\n${msg}\nLinha: ${line}`);
@@ -19,16 +18,10 @@ if (window.location.hostname && window.location.hostname !== '') {
 }
 
 if (location.protocol === 'file:') {
-    const savedIp = localStorage.getItem('bunny_server_ip');
-    BACKEND_URL = savedIp ? `http://${savedIp}:3000` : 'http://localhost:3000';
+    BACKEND_URL = 'http://localhost:3000';
 }
 
 const WS_URL = BACKEND_URL.replace('http', 'ws');
-
-// Inicialização Supabase (Sincronização Cloud Global)
-const supabaseUrl = 'https://bpickkklhpesvfbxnseh.supabase.co';
-const supabaseKey = 'sb_publishable_fTn92z0nksPNSCmELtDmOQ_KUBFcOPs';
-const supabase = (typeof window !== 'undefined' && window.supabase) ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
 
 let ws = null;
 let reconnectTimeout = null;
@@ -40,17 +33,19 @@ function connectWebSocket() {
     try {
         ws = new WebSocket(WS_URL);
     } catch(e) {
+        console.warn('WebSocket indisponível, modo offline ativo.');
         return;
     }
 
     ws.onopen = () => {
-        State.fetchAll(); // Forçar sincronia total ao conectar
+        console.log('✅ Conectado ao servidor');
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
 
     ws.onmessage = (event) => {
         try {
             const message = JSON.parse(event.data);
+
             if (message.event === 'connected') {
                 if (message.data.notifications) State.notifications = message.data.notifications;
                 if (message.data.products) State.products = message.data.products;
@@ -61,27 +56,40 @@ function connectWebSocket() {
                 State.saveLocal();
                 UI.render();
             }
+
             if (message.event === 'new_notification') {
                 State.notifications.unshift(message.data);
                 State.saveLocal();
                 System.trigger(message.data);
                 UI.render();
             }
-        } catch (e) { console.error('Erro WebSocket msg:', e); }
+        } catch (e) {
+            console.error('Erro ao processar mensagem:', e);
+        }
     };
 
     ws.onclose = () => {
+        console.log('Servidor offline. Modo local ativo.');
         ws = null;
-        reconnectTimeout = setTimeout(connectWebSocket, 2000); // Tentar a cada 2s silenciosamente
+        reconnectTimeout = setTimeout(connectWebSocket, 10000); // Tenta silenciosamente a cada 10s
     };
 
-    ws.onerror = () => {
+    ws.onerror = (error) => {
+        console.warn('WebSocket erro (silenciado)');
         ws?.close();
     };
 }
 
 function showConnectionStatus(msg, color) {
-    // Silenciado por pedido do usuário
+    let status = document.getElementById('connection-status');
+    if (!status) {
+        status = document.createElement('div');
+        status.id = 'connection-status';
+        status.style.cssText = `position:fixed;top:10px;right:10px;background:${color};color:#000;padding:8px 16px;border-radius:20px;z-index:10000;font-weight:bold;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3)`;
+        document.body.appendChild(status);
+    }
+    status.textContent = msg;
+    status.style.background = color;
 }
 
 // Tentar conectar silenciosamente (sem banner visível)
@@ -113,20 +121,18 @@ const State = {
         const brTime = new Date(now.getTime() + (offset * 3600000));
         const timestamp = customTimestamp || (new Date(brTime.getTime())).toISOString();
         
-        // Salvar no servidor (Cloud ou Local)
+        // Emulando tempo de resposta rápido
         try {
-            if (supabase) {
-                await supabase.from('notifications').insert([{
-                    type, title, value: gross, fee, net, timestamp
-                }]);
-            } else {
-                await fetch(`${BACKEND_URL}/api/notifications`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type, value, timestamp })
-                });
-            }
-        } catch (e) { console.warn('Falha ao salvar venda na nuvem'); }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 150);
+            fetch(`${BACKEND_URL}/api/notifications`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, value, timestamp }),
+                signal: controller.signal
+            }).catch(() => {}); // Fogo rápido
+            clearTimeout(timeoutId);
+        } catch (e) {}
 
         const notif = {
             id: Date.now() + Math.random(), type, title: title, value: gross, fee, net, timestamp, read: false
@@ -139,44 +145,18 @@ const State = {
 
     async fetchAll() {
         try {
-            if (supabase) {
-                const [pRes, nRes, sRes] = await Promise.all([
-                    supabase.from('products').select('*'),
-                    supabase.from('notifications').select('*').order('timestamp', { ascending: false }).limit(50),
-                    supabase.from('settings').select('*').eq('id', 1).single()
-                ]);
-
-                if (pRes.data) this.products = pRes.data;
-                if (nRes.data) this.notifications = nRes.data;
-                if (sRes.data) this.settings = sRes.data;
-            } else {
-                const [p, n, s] = await Promise.all([
-                    fetch(`${BACKEND_URL}/api/products`).then(r => r.json()),
-                    fetch(`${BACKEND_URL}/api/notifications`).then(r => r.json()),
-                    fetch(`${BACKEND_URL}/api/settings`).then(r => r.json())
-                ]);
-                this.products = p;
-                this.notifications = n;
-                this.settings = s;
-            }
-            
+            const [p, n, s] = await Promise.all([
+                fetch(`${BACKEND_URL}/api/products`).then(r => r.json()),
+                fetch(`${BACKEND_URL}/api/notifications`).then(r => r.json()),
+                fetch(`${BACKEND_URL}/api/settings`).then(r => r.json())
+            ]);
+            this.products = p;
+            this.notifications = n;
+            this.settings = s;
             this.saveLocal();
             UI.render();
             this.startGenerator();
-
-            if (State.isPC) {
-                fetch(`${BACKEND_URL}/api/info`).then(r => r.json()).then(d => {
-                    State._ips = d.ips;
-                    if (UI.currentView === 'settings' || UI.currentView === 'dashboard') UI.render();
-                }).catch(() => {});
-            }
-        } catch (e) { 
-            console.warn('Sincronização Cloud falhou, operando local.');
-            // Tenta carregar do local storage se falhar
-            this.products = JSON.parse(localStorage.getItem('bunny_products')) || [];
-            this.notifications = JSON.parse(localStorage.getItem('bunny_notifications')) || [];
-            UI.render();
-        }
+        } catch (e) { console.warn('Fetch sync falhou (Offline)'); }
     },
 
     async addProduct(name, value) {
@@ -184,15 +164,12 @@ const State = {
         const product = { id, name, value: parseFloat(value), is_active: 1 };
 
         try {
-            if (supabase) {
-                await supabase.from('products').insert([product]);
-            } else {
-                await fetch(`${BACKEND_URL}/api/products`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(product)
-                });
-            }
+            const response = await fetch(`${BACKEND_URL}/api/products`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(product)
+            });
+            if (response.ok) return;
         } catch (e) { console.warn('Erro ao salvar produto'); }
         
         this.products.unshift(product);
@@ -210,7 +187,7 @@ const State = {
         if (this.genTimer) clearTimeout(this.genTimer);
         this._isCycling = false;
 
-        const runCycle = async () => {
+        const runCycle = () => {
             const config = this.settings.custom_gen || { active: false };
             if (!config.active) {
                 this._isCycling = false;
@@ -232,12 +209,12 @@ const State = {
             this._cycleIdx++;
 
             // 1. Pix Gerado
-            await this.notify('pix', p.value);
+            this.notify('pix', p.value);
             
             // 2. Agendar Venda para exatamente 60 segundos depois
-            setTimeout(async () => {
+            setTimeout(() => {
                 if (this.settings.custom_gen?.active) {
-                    await this.notify('sale', p.value);
+                    this.notify('sale', p.value);
                 }
             }, 60000);
             
@@ -545,19 +522,15 @@ const UI = {
                     <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px">
                         <img src="logo.png?v=10" alt="Bunny Pay" style="width:80px; height:80px; object-fit:contain; filter:drop-shadow(0 4px 15px rgba(130, 10, 209, 0.2))">
                     </div>
-                    
-                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom: 20px;">
-                        <div>
+                        <div style="display:flex; justify-content:space-between; width:100%">
                             <h2 class="outfit">Dashboard</h2>
-                            ${State.isPC && State._ips ? `<p style="font-size:0.7rem; opacity:0.5; margin-top:2px;">IP para Celular: ${State._ips.join(', ')}</p>` : ''}
+                            <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
                         </div>
-                        <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
                     </div>
-
-                    <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(130,10,209,0.05), transparent); position:relative; overflow:hidden;">
-                        <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:6px 12px; font-size:0.75rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
-                        <p style="opacity:0.6; font-size:0.8rem; margin-bottom:4px;">Saldo Disponível</p>
-                        <h3 class="outfit balance-amount" style="font-size:2.2rem; margin-bottom:20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                    <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(130,10,209,0.05), transparent); position:relative;">
+                        <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:8px 16px; font-size:0.8rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
+                        <p style="opacity:0.6; font-size:0.85rem; margin-bottom:4px;">Saldo Disponível para Saque</p>
+                        <h3 class="outfit" style="font-size:2.4rem; margin-bottom:20px;">R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                         <div style="height: 120px; width: 100%; position: relative;">
                             <canvas id="salesChart"></canvas>
                         </div>
@@ -735,6 +708,15 @@ const UI = {
                 <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
                     <h2 class="outfit" style="margin-bottom:40px">Configurações</h2>
                     
+                    <div class="card-luxe" style="margin-bottom:20px; border: 1px solid rgba(255,255,255,0.05); text-align: center; padding: 30px 20px;">
+                        <i data-lucide="bell-ring" style="width:40px; height:40px; color:var(${Notification.permission === 'granted' ? '--success' : '--primary'}); margin-bottom:15px"></i>
+                        <h3 class="outfit" style="margin-bottom:10px">Status do Fluxo</h3>
+                        <p style="font-size:0.85rem; opacity:0.6; margin-bottom:20px;">
+                            ${Notification.permission === 'granted' ? 'Notificações estão Ativas! ✅' : 'Ative para começar a receber vendas agora.'}
+                        </p>
+                        ${Notification.permission !== 'granted' ? `<button class="btn-luxe btn-primary" onclick="Actions.startPulse()" style="padding:12px">Ativar Notificações 🚀</button>` : ''}
+                    </div>
+
                     ${State.isPC ? `
                     <div class="card-luxe" style="margin-bottom:20px">
                         <h4 class="outfit" style="margin-bottom:6px">Corrigir Saldo</h4>
@@ -743,27 +725,15 @@ const UI = {
                         <button class="btn-luxe btn-primary" onclick="Actions.saveBalanceAdj()">Salvar Correção</button>
                     </div>
 
-                     <div class="card-luxe" style="margin-bottom:20px; border:1px solid var(--error)">
+                    <div class="card-luxe" style="margin-bottom:20px; border:1px solid var(--error)">
                         <h4 class="outfit" style="margin-bottom:10px; color:var(--error)">Zerar Dashboard</h4>
                         <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Apaga todo o histórico de vendas e notificações. Produtos não são afetados.</p>
                         <button class="btn-luxe btn-secondary" style="color:var(--error)" onclick="Actions.resetDashboard()">Zerar Agora</button>
                     </div>
-                    ` : `
-                    <div class="card-luxe" style="margin-bottom:20px">
-                        <h4 class="outfit" style="margin-bottom:6px">Conectar ao PC</h4>
-                        <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Digite o código que aparece no seu computador (Perfil).</p>
-                        <input type="text" id="sync-code" class="input-luxe" placeholder="Ex: MTI5LjE2OC..." style="margin-bottom:12px; text-transform:uppercase">
-                        <button class="btn-luxe btn-primary" onclick="Actions.syncWithCode()">Sincronizar Agora</button>
-                        
-                        <div style="margin: 20px 0; text-align:center; opacity:0.3">OU USE O IP</div>
-                        
-                        <input type="text" id="srv-ip" class="input-luxe" placeholder="Ex: 192.168.1.10" value="${localStorage.getItem('bunny_server_ip') || ''}" style="margin-bottom:12px">
-                        <button class="btn-luxe btn-secondary" onclick="Actions.saveServerIp()">Salvar IP</button>
-                    </div>
-                    `}
+                    ` : ''}
                     
                     <button class="btn-luxe btn-secondary" onclick="Auth.logout()" style="color:var(--error); margin-bottom: 20px;">Sair da Conta</button>
-                    <p style="text-align:center; opacity:0.3; font-size:0.7rem">Bunny Pay v5.8 (PRO)</p>
+                    <p style="text-align:center; opacity:0.3; font-size:0.7rem">Bunny Pay v5.8</p>
                 </div>
             `;
         }
@@ -915,27 +885,6 @@ const Actions = {
         UI.render();
     },
 
-    saveServerIp() {
-        const ip = document.getElementById('srv-ip').value;
-        if (!ip) return alert('Digite o IP.');
-        localStorage.setItem('bunny_server_ip', ip);
-        UI.showToast('✅ IP Salvo! Reiniciando...');
-        setTimeout(() => location.reload(), 1000);
-    },
-
-    syncWithCode() {
-        const code = document.getElementById('sync-code').value.trim();
-        if (!code) return alert('Digite o código.');
-        const ip = Sync.parseCode(code);
-        if (ip && ip.split('.').length === 4) {
-            localStorage.setItem('bunny_server_ip', ip);
-            UI.showToast('✅ Sincronizado! Reiniciando...');
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            alert('Código inválido. Verifique no computador.');
-        }
-    },
-
     async toggleProdStatus(id, is_active) {
         try {
             await fetch(`${BACKEND_URL}/api/products/${id}`, {
@@ -979,16 +928,8 @@ const Actions = {
 
     async deleteProd(id) {
         if (!confirm('Excluir este produto?')) return;
-        try {
-            if (supabase) {
-                await supabase.from('products').delete().eq('id', id);
-            } else {
-                await fetch(`${BACKEND_URL}/api/products/${id}`, { method: 'DELETE' });
-            }
-        } catch (e) {
-            State.products = State.products.filter(p => p.id !== id);
-            State.saveLocal();
-        }
+        State.products = State.products.filter(p => p.id !== id);
+        State.saveLocal();
         UI.render();
     },
 
@@ -999,15 +940,11 @@ const Actions = {
         State.startGenerator();
         
         try {
-            if (supabase) {
-                await supabase.from('settings').update(newSettings).eq('id', 1);
-            } else {
-                await fetch(`${BACKEND_URL}/api/settings`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(newSettings)
-                });
-            }
+            await fetch(`${BACKEND_URL}/api/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newSettings)
+            });
         } catch (e) { console.warn('Offline settings sync'); }
     },
 

@@ -28,8 +28,7 @@ db.exec(`
         id INTEGER PRIMARY KEY CHECK (id = 1),
         notif_limit INTEGER DEFAULT 10,
         notif_interval INTEGER DEFAULT 60,
-        is_generator_on INTEGER DEFAULT 0,
-        custom_gen TEXT DEFAULT '{"active":false,"count":30,"interval":10,"productIds":[]}'
+        is_generator_on INTEGER DEFAULT 0
     );
 
     INSERT OR IGNORE INTO settings (id, notif_limit, notif_interval, is_generator_on) VALUES (1, 10, 60, 0);
@@ -46,9 +45,9 @@ module.exports = {
     // Notificações
     getAllNotifications: async () => db.prepare('SELECT * FROM notifications ORDER BY timestamp DESC').all(),
 
-    createNotification: async (type, title, value, fee, net, timestamp) => {
+    createNotification: async (type, title, value, fee, net) => {
         const stmt = db.prepare('INSERT INTO notifications (type, title, value, fee, net, timestamp) VALUES (?, ?, ?, ?, ?, ?)');
-        const result = stmt.run(type, title, value, fee, net, timestamp || new Date().toISOString());
+        const result = stmt.run(type, title, value, fee, net, new Date().toISOString());
         return db.prepare('SELECT * FROM notifications WHERE id = ?').get(result.lastInsertRowid);
     },
 
@@ -61,7 +60,7 @@ module.exports = {
 
     createProduct: async (id, name, value) => {
         const now = new Date().toISOString();
-        db.prepare('INSERT INTO products (id, name, value, is_active, created_at) VALUES (?, ?, ?, 1, ?)').run(id, name, value, now);
+        db.prepare('INSERT INTO products (id, name, value, is_active, created_at) VALUES (?, ?, 1, ?, ?)').run(id, name, value, now);
         return { id, name, value, is_active: 1, created_at: now };
     },
 
@@ -78,10 +77,10 @@ module.exports = {
     // Configurações
     getSettings: async () => db.prepare('SELECT * FROM settings WHERE id = 1').get(),
 
-    updateSettings: async (notif_limit, notif_interval, is_generator_on, custom_gen) => {
-        db.prepare('UPDATE settings SET notif_limit = ?, notif_interval = ?, is_generator_on = ?, custom_gen = ? WHERE id = 1')
-            .run(notif_limit, notif_interval, is_generator_on ? 1 : 0, JSON.stringify(custom_gen));
-        return { notif_limit, notif_interval, is_generator_on, custom_gen };
+    updateSettings: async (notif_limit, notif_interval, is_generator_on) => {
+        db.prepare('UPDATE settings SET notif_limit = ?, notif_interval = ?, is_generator_on = ? WHERE id = 1')
+            .run(notif_limit, notif_interval, is_generator_on ? 1 : 0);
+        return { notif_limit, notif_interval, is_generator_on };
     },
 
     // Usuário

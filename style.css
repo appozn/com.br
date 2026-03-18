@@ -37,7 +37,7 @@ body::before {
   width: 100%;
   margin: 0 auto;
   min-height: 100vh;
-  padding: 0 16px 120px;
+  padding: 0 0 120px;
 }
 
 body.pc-mode #app {
@@ -344,39 +344,3 @@ input:checked + .slider:before { transform: translateX(20px); }
 .admin-table { width: 100%; border-collapse: collapse; min-width: 600px; background: rgba(255,255,255,0.02); }
 .admin-table th, .admin-table td { padding: 20px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
 .admin-table th { font-weight: 800; font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; background: rgba(130, 10, 209, 0.05); }
-
-/* Mobile Adjustments */
-@media screen and (max-width: 480px) {
-  .card-luxe {
-    padding: 18px;
-    border-radius: 24px;
-  }
-  
-  .balance-amount {
-    font-size: 1.8rem !important;
-  }
-  
-  .ntf-card {
-    padding: 14px;
-    gap: 12px;
-  }
-  
-  h2.outfit {
-    font-size: 1.5rem;
-  }
-
-  .btn-luxe {
-    padding: 14px;
-    font-size: 0.9rem;
-  }
-}
-
-@media screen and (max-width: 360px) {
-  .balance-amount {
-    font-size: 1.5rem !important;
-  }
-  
-  .card-luxe {
-    padding: 12px;
-  }
-}
