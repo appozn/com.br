@@ -60,16 +60,81 @@ app.post('/api/products', async (req, res) => {
     try {
         const { id, name, value } = req.body;
         const product = await db.createProduct(id, name, parseFloat(value));
+        broadcastState(); // Sync all admins
         res.json(product);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
+app.delete('/api/products/:id', async (req, res) => {
+    try {
+        db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+        broadcastState();
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/products/:id', async (req, res) => {
+    try {
+        const { name, value, is_active } = req.body;
+        if (name !== undefined && value !== undefined) {
+             await db.updateProduct(req.params.id, name, parseFloat(value));
+        }
+        if (is_active !== undefined) {
+            await db.updateProductStatus(req.params.id, is_active);
+        }
+        
+        // Broadcast atualizado
+        broadcastState();
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/settings', async (req, res) => {
+    try {
+        res.json(await db.getSettings());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/settings', async (req, res) => {
+    try {
+        const { notif_limit, notif_interval, is_generator_on } = req.body;
+        const settings = await db.updateSettings(notif_limit, notif_interval, is_generator_on);
+        broadcastState();
+        res.json(settings);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+async function broadcastState() {
+    const data = {
+        notifications: await db.getAllNotifications(),
+        products: await db.getAllProducts(),
+        settings: await db.getSettings()
+    };
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(JSON.stringify({
+                event: 'connected',
+                data: data
+            }));
+        }
+    });
+}
+
 app.post('/api/login', async (req, res) => {
     try {
         const { email } = req.body;
         const user = await db.createUser(email);
+        broadcastState();
         res.json(user);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -99,6 +164,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 
     console.log('');
     console.log('✅ Banco de dados SQLite conectado');
+    try {
+        // Migração forçada para garantir sincronia com as novas regras
+        db.prepare("UPDATE products SET is_active = 1 WHERE is_active = 0").run();
+        db.prepare("UPDATE products SET created_at = ? WHERE created_at IS NULL").run(new Date(0).toISOString());
+        console.log('✅ Produtos sincronizados com o novo fluxo');
+    } catch(e) { console.log('ℹ️ Otimização de DB já aplicada'); }
     console.log('✅ WebSocket ativo (sincronização em tempo real)');
     console.log('');
     console.log('Pressione Ctrl+C para parar o servidor');
@@ -128,7 +199,8 @@ wss.on('connection', async (ws) => {
             event: 'connected',
             data: {
                 notifications: await db.getAllNotifications(),
-                products: await db.getAllProducts()
+                products: await db.getAllProducts(),
+                settings: await db.getSettings()
             }
         }));
     } catch (e) {
