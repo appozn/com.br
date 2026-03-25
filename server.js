@@ -107,6 +107,10 @@ app.post('/api/settings', async (req, res) => {
     try {
         const { notif_limit, notif_interval, is_generator_on } = req.body;
         const settings = await db.updateSettings(notif_limit, notif_interval, is_generator_on);
+        
+        // Reiniciar gerador para aplicar mudanças imediatamente
+        startServerGenerator();
+        
         broadcastState();
         res.json(settings);
     } catch (e) {
@@ -188,12 +192,20 @@ async function startServerGenerator() {
     const runCycle = async () => {
         try {
             const settings = await db.getSettings();
-            if (!settings || !settings.is_generator_on) return;
+            if (!settings || !settings.is_generator_on) {
+                if (generatorInterval) clearInterval(generatorInterval); // Ensure interval is cleared if generator is off
+                generatorInterval = null; // Reset interval handle
+                return;
+            }
 
             const products = await db.getAllProducts();
             const activeProds = products.filter(p => p.is_active !== 0);
 
-            if (activeProds.length === 0) return;
+            if (activeProds.length === 0) {
+                if (generatorInterval) clearInterval(generatorInterval); // Ensure interval is cleared if no active products
+                generatorInterval = null; // Reset interval handle
+                return;
+            }
 
             // Escolhe um produto aleatório
             const p = activeProds[Math.floor(Math.random() * activeProds.length)];
@@ -219,6 +231,8 @@ async function startServerGenerator() {
 
         } catch (e) {
             console.error('[Gerador] Erro no ciclo:', e);
+            if (generatorInterval) clearInterval(generatorInterval); // Clear interval on error to prevent infinite loop
+            generatorInterval = null; // Reset interval handle
         }
     };
 

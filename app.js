@@ -270,8 +270,8 @@ const System = {
         b.innerHTML = `
             <div class="push-icon"><i data-lucide="${notif.type === 'pix' ? 'qr-code' : 'zap'}"></i></div>
             <div class="push-content">
-                <h5>OZN PAY</h5>
-                <p><b>${notif.title}</b><br>Valor: ${Number(notif.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <h5>Venda Aprovada</h5>
+                <p><b>${notif.title}</b><br>Valor: R$ ${Number(notif.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
         `;
         overlay.prepend(b);
@@ -284,7 +284,7 @@ const System = {
         if (window.swRegistration && Notification.permission === "granted") {
             try {
                 window.swRegistration.showNotification("Venda Aprovada", {
-                    body: `R$ ${amount}`,
+                    body: `Valor: R$ ${amount}`,
                     icon: 'logo.png?v=10',
                     badge: 'logo.png?v=10',
                     vibrate: [200, 100, 200],
@@ -298,7 +298,7 @@ const System = {
         if (Notification.permission === "granted") {
             try {
                 new Notification("Venda Aprovada", {
-                    body: `R$ ${amount}`,
+                    body: `Valor: R$ ${amount}`,
                     icon: 'logo.png'
                 });
             } catch (e) { console.error("Notificação nativa falhou", e); }
