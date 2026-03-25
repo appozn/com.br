@@ -60,6 +60,7 @@ app.post('/api/products', async (req, res) => {
     try {
         const { id, name, value } = req.body;
         const product = await db.createProduct(id, name, parseFloat(value));
+        startServerGenerator(); // Refresh generator
         broadcastState(); // Sync all admins
         res.json(product);
     } catch (e) {
@@ -70,6 +71,7 @@ app.post('/api/products', async (req, res) => {
 app.delete('/api/products/:id', async (req, res) => {
     try {
         db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+        startServerGenerator(); // Refresh generator
         broadcastState();
         res.json({ success: true });
     } catch (e) {
@@ -88,6 +90,7 @@ app.put('/api/products/:id', async (req, res) => {
         }
         
         // Broadcast atualizado
+        startServerGenerator(); // Refresh generator
         broadcastState();
         res.json({ success: true });
     } catch (e) {
@@ -183,61 +186,66 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // WebSocket Server
 const wss = new WebSocketServer({ server });
 
-// --- GERADOR DE VENDAS AUTOMÁTICO (SERVIDOR) ---
+ // --- GERADOR DE VENDAS AUTOMÁTICO (SERVIDOR) ---
 let generatorInterval = null;
+let pendingSales = []; // Fila para vendas aprovadas pendentes
 
 async function startServerGenerator() {
     if (generatorInterval) clearInterval(generatorInterval);
 
-    const runCycle = async () => {
+    console.log('[Gerador] Iniciando loop de monitoramento...');
+
+    const tick = async () => {
         try {
             const settings = await db.getSettings();
             if (!settings || !settings.is_generator_on) {
-                if (generatorInterval) clearInterval(generatorInterval); // Ensure interval is cleared if generator is off
-                generatorInterval = null; // Reset interval handle
+                pendingSales = []; // Limpa se desligar
                 return;
             }
 
-            const products = await db.getAllProducts();
-            const activeProds = products.filter(p => p.is_active !== 0);
+            const now = Date.now();
 
-            if (activeProds.length === 0) {
-                if (generatorInterval) clearInterval(generatorInterval); // Ensure interval is cleared if no active products
-                generatorInterval = null; // Reset interval handle
-                return;
-            }
-
-            // Escolhe um produto aleatório
-            const p = activeProds[Math.floor(Math.random() * activeProds.length)];
-
-            // 1. Criar Pix Gerado
-            console.log(`[Gerador] Criando Pix para: ${p.name}`);
-            const pix = await createAndBroadcastNotification('pix', 'Pix Gerado!', p.value);
-
-            // 2. Venda aprovada após 19 segundos (simulado)
-            setTimeout(async () => {
-                const currentSettings = await db.getSettings();
-                if (currentSettings.is_generator_on) {
-                    console.log(`[Gerador] Aprovando Venda: ${p.name}`);
-                    await createAndBroadcastNotification('sale', 'Venda Aprovada!', p.value);
+            // 1. Processar vendas pendentes (que atingiram o tempo de aprovação)
+            for (let i = pendingSales.length - 1; i >= 0; i--) {
+                const sale = pendingSales[i];
+                if (now >= sale.approveAt) {
+                    console.log(`[Gerador] APROVANDO VENDA: ${sale.productName}`);
+                    await createAndBroadcastNotification('sale', 'Venda Aprovada!', sale.value);
+                    pendingSales.splice(i, 1);
                 }
-            }, 19000);
+            }
 
-            // Usa o intervalo das configurações ou 25s como padrão
+            // 2. Tentar gerar novo Pix se o intervalo passou
+            const lastPixTime = generatorInterval._lastPixTime || 0;
             const intervalTime = (settings.notif_interval || 25) * 1000;
-            
-            if (generatorInterval) clearInterval(generatorInterval);
-            generatorInterval = setInterval(runCycle, intervalTime);
+
+            if (now - lastPixTime >= intervalTime) {
+                const products = await db.getAllProducts();
+                const activeProds = products.filter(p => p.is_active !== 0);
+
+                if (activeProds.length > 0) {
+                    const p = activeProds[Math.floor(Math.random() * activeProds.length)];
+                    console.log(`[Gerador] GERANDO PIX: ${p.name}`);
+                    await createAndBroadcastNotification('pix', 'Pix Gerado!', p.value);
+                    
+                    // Agenda aprovação para daqui a 19 segundos
+                    pendingSales.push({
+                        productName: p.name,
+                        value: p.value,
+                        approveAt: now + 19000
+                    });
+                    
+                    generatorInterval._lastPixTime = now;
+                }
+            }
 
         } catch (e) {
-            console.error('[Gerador] Erro no ciclo:', e);
-            if (generatorInterval) clearInterval(generatorInterval); // Clear interval on error to prevent infinite loop
-            generatorInterval = null; // Reset interval handle
+            console.error('[Gerador] Erro no tick:', e);
         }
     };
 
-    // Início imediato do primeiro ciclo
-    runCycle();
+    generatorInterval = setInterval(tick, 1000);
+    tick(); 
 }
 
 async function createAndBroadcastNotification(type, title, value) {

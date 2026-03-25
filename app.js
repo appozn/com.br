@@ -270,7 +270,7 @@ const System = {
         b.innerHTML = `
             <div class="push-icon"><i data-lucide="${notif.type === 'pix' ? 'qr-code' : 'zap'}"></i></div>
             <div class="push-content">
-                <h5>Venda Aprovada</h5>
+                <h5>${notif.title}</h5>
                 <p><b>${notif.title}</b><br>Valor: R$ ${Number(notif.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
         `;
@@ -283,7 +283,7 @@ const System = {
         const amount = Math.abs(Number(notif.net || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         if (window.swRegistration && Notification.permission === "granted") {
             try {
-                window.swRegistration.showNotification("Venda Aprovada", {
+                window.swRegistration.showNotification(notif.title, {
                     body: `Valor: R$ ${amount}`,
                     icon: 'logo.png?v=10',
                     badge: 'logo.png?v=10',
@@ -297,7 +297,7 @@ const System = {
 
         if (Notification.permission === "granted") {
             try {
-                new Notification("Venda Aprovada", {
+                new Notification(notif.title, {
                     body: `Valor: R$ ${amount}`,
                     icon: 'logo.png'
                 });
@@ -406,7 +406,7 @@ const UI = {
             <div class="push-banner" style="transform:none; animation:none; margin-bottom:10px">
                 <div class="push-icon"><i data-lucide="${n.type === 'pix' ? 'qr-code' : 'zap'}"></i></div>
                 <div class="push-content">
-                    <h5>Venda Aprovada</h5>
+                    <h5>${n.title}</h5>
                     <p><b>${n.title}</b><br>Valor: R$ ${Number(n.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
             </div>
