@@ -161,7 +161,7 @@ const State = {
             this.settings = { ...s, custom_gen: savedCustomGen || this.settings.custom_gen };
             this.saveLocal();
             UI.render();
-            this.startGenerator();
+            // this.startGenerator(); // DESATIVADO: O servidor agora gerencia o gerador em background
         } catch (e) { console.warn('Fetch sync falhou (Offline)'); }
     },
 
@@ -234,8 +234,8 @@ const State = {
         };
 
         if (!this._isCycling) {
-            this._isCycling = true;
-            this.genTimer = setTimeout(runCycle, 5000); // Começa em 5s
+            // this._isCycling = true;
+            // this.genTimer = setTimeout(runCycle, 5000); // Começa em 5s
         }
     }
 };
@@ -283,8 +283,8 @@ const System = {
         const amount = Math.abs(Number(notif.net || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         if (window.swRegistration && Notification.permission === "granted") {
             try {
-                window.swRegistration.showNotification("Bunny Pay", {
-                    body: `${notif.title}\nValor: ${amount}`,
+                window.swRegistration.showNotification("Venda Aprovada", {
+                    body: `R$ ${amount}`,
                     icon: 'logo.png?v=10',
                     badge: 'logo.png?v=10',
                     vibrate: [200, 100, 200],
@@ -297,8 +297,8 @@ const System = {
 
         if (Notification.permission === "granted") {
             try {
-                new Notification("Bunny Pay", {
-                    body: `${notif.title}\nValor: ${amount}`,
+                new Notification("Venda Aprovada", {
+                    body: `R$ ${amount}`,
                     icon: 'logo.png'
                 });
             } catch (e) { console.error("Notificação nativa falhou", e); }
@@ -406,8 +406,8 @@ const UI = {
             <div class="push-banner" style="transform:none; animation:none; margin-bottom:10px">
                 <div class="push-icon"><i data-lucide="${n.type === 'pix' ? 'qr-code' : 'zap'}"></i></div>
                 <div class="push-content">
-                    <h5>Bunny Pay</h5>
-                    <p><b>${n.title}</b><br>Valor: ${Number(n.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <h5>Venda Aprovada</h5>
+                    <p><b>${n.title}</b><br>Valor: R$ ${Number(n.net || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
             </div>
         `).join('');

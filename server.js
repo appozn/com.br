@@ -179,6 +179,76 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // WebSocket Server
 const wss = new WebSocketServer({ server });
 
+// --- GERADOR DE VENDAS AUTOMÁTICO (SERVIDOR) ---
+let generatorInterval = null;
+
+async function startServerGenerator() {
+    if (generatorInterval) clearInterval(generatorInterval);
+
+    const runCycle = async () => {
+        try {
+            const settings = await db.getSettings();
+            if (!settings || !settings.is_generator_on) return;
+
+            const products = await db.getAllProducts();
+            const activeProds = products.filter(p => p.is_active !== 0);
+
+            if (activeProds.length === 0) return;
+
+            // Escolhe um produto aleatório
+            const p = activeProds[Math.floor(Math.random() * activeProds.length)];
+
+            // 1. Criar Pix Gerado
+            console.log(`[Gerador] Criando Pix para: ${p.name}`);
+            const pix = await createAndBroadcastNotification('pix', 'Pix Gerado!', p.value);
+
+            // 2. Venda aprovada após 19 segundos (simulado)
+            setTimeout(async () => {
+                const currentSettings = await db.getSettings();
+                if (currentSettings.is_generator_on) {
+                    console.log(`[Gerador] Aprovando Venda: ${p.name}`);
+                    await createAndBroadcastNotification('sale', 'Venda Aprovada!', p.value);
+                }
+            }, 19000);
+
+            // Usa o intervalo das configurações ou 25s como padrão
+            const intervalTime = (settings.notif_interval || 25) * 1000;
+            
+            if (generatorInterval) clearInterval(generatorInterval);
+            generatorInterval = setInterval(runCycle, intervalTime);
+
+        } catch (e) {
+            console.error('[Gerador] Erro no ciclo:', e);
+        }
+    };
+
+    // Início imediato do primeiro ciclo
+    runCycle();
+}
+
+async function createAndBroadcastNotification(type, title, value) {
+    const isWithdraw = type === 'withdraw';
+    const gross = parseFloat(value);
+    const fee = isWithdraw ? 0 : (gross * 0.0599) + 2.49;
+    const net = isWithdraw ? -gross : gross - fee;
+
+    const notification = await db.createNotification(type, title, gross, fee, net);
+
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) { // OPEN
+            client.send(JSON.stringify({
+                event: 'new_notification',
+                data: notification
+            }));
+        }
+    });
+
+    return notification;
+}
+
+// Iniciar o gerador ao subir o servidor
+startServerGenerator();
+
 // Keep-Alive mechanism (Heartbeat) - EVITA DESCONEXÃO
 const interval = setInterval(() => {
     wss.clients.forEach((ws) => {
@@ -214,6 +284,9 @@ wss.on('connection', async (ws) => {
     ws.on('error', (e) => console.error('WebSocket erro cliente:', e));
 });
 
-wss.on('close', () => clearInterval(interval));
+wss.on('close', () => {
+    clearInterval(interval);
+    if (generatorInterval) clearInterval(generatorInterval);
+});
 
 module.exports = { app, server, wss };
