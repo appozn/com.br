@@ -137,10 +137,23 @@ async function broadcastState() {
     });
 }
 
+app.post('/api/test-notification', async (req, res) => {
+    try {
+        console.log('[Sistema] Disparando notificação de teste...');
+        const products = await db.getAllProducts();
+        const p = products[0] || { name: 'Produto Teste', value: 100 };
+        const notif = await createAndBroadcastNotification('sale', 'Venda Aprovada!', p.value);
+        res.json({ success: true, notification: notif });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/login', async (req, res) => {
     try {
         const { email } = req.body;
         const user = await db.createUser(email);
+        console.log(`[Sistema] Login: ${email}`);
         broadcastState();
         res.json(user);
     } catch (e) {
@@ -187,55 +200,62 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 const wss = new WebSocketServer({ server });
 
  // --- GERADOR DE VENDAS AUTOMÁTICO (SERVIDOR) ---
+// --- GERADOR DE VENDAS AUTOMÁTICO (SERVIDOR) ---
 let generatorInterval = null;
-let pendingSales = []; // Fila para vendas aprovadas pendentes
+let pendingSales = []; 
+let lastPixTime = 0; // Variável estável no topo
 
 async function startServerGenerator() {
     if (generatorInterval) clearInterval(generatorInterval);
+    
+    // Forçar reset de tempos ao iniciar para garantir execução imediata se ligado
+    lastPixTime = 0;
+    pendingSales = [];
 
-    console.log('[Gerador] Iniciando loop de monitoramento...');
+    console.log('[Gerador] Iniciando loop de monitoramento (1s)...');
 
     const tick = async () => {
         try {
             const settings = await db.getSettings();
+            
             if (!settings || !settings.is_generator_on) {
-                pendingSales = []; // Limpa se desligar
+                pendingSales = [];
                 return;
             }
 
             const now = Date.now();
 
-            // 1. Processar vendas pendentes (que atingiram o tempo de aprovação)
+            // 1. Processar vendas pendentes
             for (let i = pendingSales.length - 1; i >= 0; i--) {
                 const sale = pendingSales[i];
                 if (now >= sale.approveAt) {
-                    console.log(`[Gerador] APROVANDO VENDA: ${sale.productName}`);
+                    console.log(`[Gerador] APROVANDO VENDA: ${sale.productName} (R$ ${sale.value})`);
                     await createAndBroadcastNotification('sale', 'Venda Aprovada!', sale.value);
                     pendingSales.splice(i, 1);
                 }
             }
 
             // 2. Tentar gerar novo Pix se o intervalo passou
-            const lastPixTime = generatorInterval._lastPixTime || 0;
             const intervalTime = (settings.notif_interval || 25) * 1000;
 
             if (now - lastPixTime >= intervalTime) {
                 const products = await db.getAllProducts();
-                const activeProds = products.filter(p => p.is_active !== 0);
+                const activeProds = products.filter(p => !!p.is_active);
 
                 if (activeProds.length > 0) {
                     const p = activeProds[Math.floor(Math.random() * activeProds.length)];
-                    console.log(`[Gerador] GERANDO PIX: ${p.name}`);
+                    console.log(`[Gerador] GERANDO PIX: ${p.name} (R$ ${p.value})`);
                     await createAndBroadcastNotification('pix', 'Pix Gerado!', p.value);
                     
-                    // Agenda aprovação para daqui a 19 segundos
                     pendingSales.push({
                         productName: p.name,
                         value: p.value,
                         approveAt: now + 19000
                     });
                     
-                    generatorInterval._lastPixTime = now;
+                    lastPixTime = now;
+                } else {
+                    console.log('[Gerador] Nenhum produto ativo encontrado.');
                 }
             }
 
@@ -245,7 +265,8 @@ async function startServerGenerator() {
     };
 
     generatorInterval = setInterval(tick, 1000);
-    tick(); 
+    // Executa o primeiro ciclo após um pequeno delay para garantir que tudo carregou
+    setTimeout(tick, 1000); 
 }
 
 async function createAndBroadcastNotification(type, title, value) {

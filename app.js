@@ -39,6 +39,7 @@ function connectWebSocket() {
 
     ws.onopen = () => {
         console.log('✅ Conectado ao servidor');
+        showConnectionStatus('Conectado', 'var(--success)');
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
 
@@ -53,9 +54,9 @@ function connectWebSocket() {
                     // Preserve local custom_gen — server DB doesn't store it
                     const savedCustomGen = State.settings.custom_gen;
                     State.settings = { ...message.data.settings, custom_gen: savedCustomGen || State.settings.custom_gen };
-                    State.startGenerator();
+                    // State.startGenerator(); // DESATIVADO: Servidor gerencia
+                    State.saveLocal();
                 }
-                State.saveLocal();
                 UI.render();
             }
 
@@ -72,6 +73,7 @@ function connectWebSocket() {
 
     ws.onclose = () => {
         console.log('Servidor offline. Modo local ativo.');
+        showConnectionStatus('Reconectando...', 'var(--error)');
         ws = null;
         reconnectTimeout = setTimeout(connectWebSocket, 10000); // Tenta silenciosamente a cada 10s
     };
@@ -87,7 +89,7 @@ function showConnectionStatus(msg, color) {
     if (!status) {
         status = document.createElement('div');
         status.id = 'connection-status';
-        status.style.cssText = `position:fixed;top:10px;right:10px;background:${color};color:#000;padding:8px 16px;border-radius:20px;z-index:10000;font-weight:bold;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3)`;
+        status.style.cssText = `position:fixed;top:10px;right:10px;background:${color};color:#fff;padding:4px 12px;border-radius:20px;z-index:10000;font-weight:bold;font-size:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0.8;pointer-events:none`;
         document.body.appendChild(status);
     }
     status.textContent = msg;
@@ -766,6 +768,12 @@ const UI = {
                         <button class="btn-luxe btn-primary" onclick="Actions.saveBalanceAdj()">Salvar Correção</button>
                     </div>
 
+                    <div class="card-luxe" style="margin-bottom:20px; border:1px solid var(--primary)">
+                        <h4 class="outfit" style="margin-bottom:10px; color:var(--primary)">Teste de Notificação</h4>
+                        <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Clique para simular uma venda e testar se as notificações estão chegando.</p>
+                        <button class="btn-luxe btn-primary" onclick="Actions.testNotification()">Testar Agora</button>
+                    </div>
+
                     <div class="card-luxe" style="margin-bottom:20px; border:1px solid var(--error)">
                         <h4 class="outfit" style="margin-bottom:10px; color:var(--error)">Zerar Dashboard</h4>
                         <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Apaga todo o histórico de vendas e notificações. Produtos não são afetados.</p>
@@ -892,7 +900,7 @@ const Actions = {
         await State.addProduct(n, v);
         document.getElementById('pn').value = '';
         document.getElementById('pv').value = '';
-        State.startGenerator(); // Pulso imediato
+        // State.startGenerator(); // DESATIVADO: Servidor gerencia
         UI.render();
     },
 
@@ -924,6 +932,15 @@ const Actions = {
         State.saveLocal();
         UI.showToast('✅ Dashboard zerada!');
         UI.render();
+    },
+
+    async testNotification() {
+        UI.showToast('Enviando teste... 🚀');
+        try {
+            await fetch(`${BACKEND_URL}/api/test-notification`, { method: 'POST' });
+        } catch (e) {
+            UI.showToast('Erro ao testar ❌');
+        }
     },
 
     async toggleProdStatus(id, is_active) {
