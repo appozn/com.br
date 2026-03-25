@@ -162,7 +162,19 @@ app.post('/api/login', async (req, res) => {
 });
 
 // HTTP Server
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, () => {
+    // ... callback will execute if successful ...
+}).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error('❌ ERRO CRÍTICO: A porta 3000 já está sendo usada por outro programa.');
+        console.error('ℹ️ Por favor, feche outras janelas do Bunny Pay e tente de novo.');
+        process.exit(1);
+    } else {
+        console.error('❌ Erro ao iniciar servidor:', err);
+    }
+});
+
+server.on('listening', () => {
     console.log('╔════════════════════════════════════════╗');
     console.log('║    Bunny Pay - Servidor Iniciado      ║');
     console.log('╚════════════════════════════════════════╝');
@@ -199,52 +211,52 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // WebSocket Server
 const wss = new WebSocketServer({ server });
 
- // --- GERADOR DE VENDAS AUTOMÁTICO (SERVIDOR) ---
-// --- GERADOR DE VENDAS AUTOMÁTICO (SERVIDOR) ---
 let generatorInterval = null;
 let pendingSales = []; 
-let lastPixTime = 0; // Variável estável no topo
+let lastPixTime = 0; 
 
 async function startServerGenerator() {
     if (generatorInterval) clearInterval(generatorInterval);
     
-    // Forçar reset de tempos ao iniciar para garantir execução imediata se ligado
     lastPixTime = 0;
     pendingSales = [];
 
-    console.log('[Gerador] Iniciando loop de monitoramento (1s)...');
+    console.log('[Gerador] Iniciando monitoramento em tempo real...');
 
     const tick = async () => {
         try {
             const settings = await db.getSettings();
             
             if (!settings || !settings.is_generator_on) {
-                pendingSales = [];
+                if (pendingSales.length > 0) {
+                    console.log('[Gerador] Desligando (Limpando pendências)');
+                    pendingSales = [];
+                }
                 return;
             }
 
+            console.log('[Gerador] Tick: Sistema Ativo');
             const now = Date.now();
 
-            // 1. Processar vendas pendentes
+            // 1. Processar aprovações pendentes
             for (let i = pendingSales.length - 1; i >= 0; i--) {
                 const sale = pendingSales[i];
                 if (now >= sale.approveAt) {
-                    console.log(`[Gerador] APROVANDO VENDA: ${sale.productName} (R$ ${sale.value})`);
+                    console.log(`[Gerador] -> APROVANDO: ${sale.productName}`);
                     await createAndBroadcastNotification('sale', 'Venda Aprovada!', sale.value);
                     pendingSales.splice(i, 1);
                 }
             }
 
-            // 2. Tentar gerar novo Pix se o intervalo passou
+            // 2. Gerar novo Pix
             const intervalTime = (settings.notif_interval || 25) * 1000;
-
             if (now - lastPixTime >= intervalTime) {
                 const products = await db.getAllProducts();
-                const activeProds = products.filter(p => !!p.is_active);
+                const activeProds = products.filter(p => p.is_active !== 0);
 
                 if (activeProds.length > 0) {
                     const p = activeProds[Math.floor(Math.random() * activeProds.length)];
-                    console.log(`[Gerador] GERANDO PIX: ${p.name} (R$ ${p.value})`);
+                    console.log(`[Gerador] -> NOVO PIX: ${p.name}`);
                     await createAndBroadcastNotification('pix', 'Pix Gerado!', p.value);
                     
                     pendingSales.push({
@@ -254,13 +266,10 @@ async function startServerGenerator() {
                     });
                     
                     lastPixTime = now;
-                } else {
-                    console.log('[Gerador] Nenhum produto ativo encontrado.');
                 }
             }
-
         } catch (e) {
-            console.error('[Gerador] Erro no tick:', e);
+            console.error('[Gerador] Erro crítico no loop:', e);
         }
     };
 

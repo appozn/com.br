@@ -62,7 +62,8 @@ module.exports = {
 
     createProduct: async (id, name, value) => {
         const now = new Date().toISOString();
-        db.prepare('INSERT INTO products (id, name, value, is_active, created_at) VALUES (?, ?, 1, ?, ?)').run(id, name, value, now);
+        db.prepare('INSERT INTO products (id, name, value, is_active, created_at) VALUES (?, ?, ?, 1, ?)')
+            .run(id, name, value, now);
         return { id, name, value, is_active: 1, created_at: now };
     },
 

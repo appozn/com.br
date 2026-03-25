@@ -71,16 +71,16 @@ function connectWebSocket() {
         }
     };
 
-    ws.onclose = () => {
-        console.log('Servidor offline. Modo local ativo.');
-        showConnectionStatus('Reconectando...', 'var(--error)');
-        ws = null;
-        reconnectTimeout = setTimeout(connectWebSocket, 10000); // Tenta silenciosamente a cada 10s
+    ws.onerror = (err) => {
+        console.error('Erro de WebSocket:', err);
     };
 
-    ws.onerror = (error) => {
-        console.warn('WebSocket erro (silenciado)');
-        ws?.close();
+    ws.onclose = (e) => {
+        console.warn('Conexão fechada:', e.code, e.reason);
+        showConnectionStatus('Reconectando...', 'var(--error)');
+        ws = null;
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(connectWebSocket, 5000); 
     };
 }
 
@@ -96,10 +96,8 @@ function showConnectionStatus(msg, color) {
     status.style.background = color;
 }
 
-// Tentar conectar silenciosamente (sem banner visível)
-if (location.protocol !== 'file:') {
-    connectWebSocket();
-}
+// Tentar conectar sempre que possível
+connectWebSocket();
 
 const State = {
     user: JSON.parse(localStorage.getItem('bunny_user')) || null,
@@ -744,10 +742,10 @@ const UI = {
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; gap: 10px;">
                             <b style="color:${cfg.active ? 'var(--primary)' : 'white'}; font-size: 0.9rem; flex: 1;">MODO AUTOMÁTICO</b>
-                            <label class="switch" style="flex-shrink: 0;">
-                                <input type="checkbox" id="cg-active" ${cfg.active ? 'checked' : ''} onchange="Actions.saveCustomGen()">
-                                <span class="slider"></span>
-                            </label>
+                             <label class="switch" style="flex-shrink: 0;">
+                                 <input type="checkbox" id="cg-active" ${State.settings.is_generator_on ? 'checked' : ''} onchange="Actions.saveCustomGen()">
+                                 <span class="slider"></span>
+                             </label>
                         </div>
                         <p style="font-size:0.8rem; opacity:0.6; margin-bottom: 20px; line-height: 1.4;">Gera vendas automaticamente (Pix → 45s → Venda aprovada).</p>
                         <h4 class="outfit" style="margin-bottom:12px; font-size: 0.9rem;">Produtos Ativos no Gerador</h4>
@@ -1019,8 +1017,8 @@ const Actions = {
             UI.showToast('🚀 Iniciando Ciclo...');
         }
 
-        await this.saveSettings({ custom_gen });
-        UI.showToast('✅ Configurações de Fluxo Ativadas!');
+        await this.saveSettings({ is_generator_on: active ? 1 : 0, custom_gen });
+        UI.showToast(active ? 'Gerador Ativado! 🚀' : 'Gerador Desativado');
     },
 
     async startPulse() {
