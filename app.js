@@ -50,7 +50,9 @@ function connectWebSocket() {
                 if (message.data.notifications) State.notifications = message.data.notifications;
                 if (message.data.products) State.products = message.data.products;
                 if (message.data.settings) {
-                    State.settings = message.data.settings;
+                    // Preserve local custom_gen — server DB doesn't store it
+                    const savedCustomGen = State.settings.custom_gen;
+                    State.settings = { ...message.data.settings, custom_gen: savedCustomGen || State.settings.custom_gen };
                     State.startGenerator();
                 }
                 State.saveLocal();
@@ -101,11 +103,13 @@ const State = {
     user: JSON.parse(localStorage.getItem('bunny_user')) || null,
     products: JSON.parse(localStorage.getItem('bunny_products')) || [],
     notifications: JSON.parse(localStorage.getItem('bunny_notifications')) || [],
-    settings: JSON.parse(localStorage.getItem('bunny_settings')) || { notif_limit: 1000, notif_interval: 1, is_generator_on: 1, custom_gen: { active: false, count: 30, interval: 10, productIds: [] } },
+    settings: JSON.parse(localStorage.getItem('bunny_settings')) || { notif_limit: 999999, notif_interval: 1, is_generator_on: 1, custom_gen: { active: false, count: 30, interval: 10, productIds: [] } },
+
     currentView: 'dashboard',
     isLocked: false,
     genTimer: null,
-    isPC: window.innerWidth > 1024,
+    isPC: window.innerWidth > 680,
+
     _lastGens: {},
 
     async notify(type, value, customTimestamp = null) {
@@ -152,7 +156,9 @@ const State = {
             ]);
             this.products = p;
             this.notifications = n;
-            this.settings = s;
+            // Preserve local custom_gen — server DB doesn't store it
+            const savedCustomGen = this.settings.custom_gen;
+            this.settings = { ...s, custom_gen: savedCustomGen || this.settings.custom_gen };
             this.saveLocal();
             UI.render();
             this.startGenerator();
@@ -185,6 +191,8 @@ const State = {
 
     async startGenerator() {
         if (this.genTimer) clearTimeout(this.genTimer);
+        if (this._saleTimers) this._saleTimers.forEach(t => clearTimeout(t));
+        this._saleTimers = [];
         this._isCycling = false;
 
         const runCycle = () => {
@@ -194,9 +202,12 @@ const State = {
                 return;
             }
 
+            // Always re-read products fresh (picks up newly added ones!)
             const activeProds = this.products.filter(p => {
-                const isSelected = config.productIds && config.productIds.length > 0 ? config.productIds.includes(p.id) : p.is_active !== 0;
-                return isSelected;
+                if (config.productIds && config.productIds.length > 0) {
+                    return config.productIds.includes(p.id);
+                }
+                return p.is_active !== 0;
             });
 
             if (activeProds.length === 0) {
@@ -204,27 +215,27 @@ const State = {
                 return;
             }
 
-            if (isNaN(this._cycleIdx)) this._cycleIdx = 0;
-            const p = activeProds[this._cycleIdx % activeProds.length];
-            this._cycleIdx++;
+            // Pick a RANDOM product each cycle
+            const p = activeProds[Math.floor(Math.random() * activeProds.length)];
 
             // 1. Pix Gerado
             this.notify('pix', p.value);
-            
-            // 2. Agendar Venda para exatamente 60 segundos depois
-            setTimeout(() => {
+
+            // 2. Venda aprovada após 19 segundos
+            const saleTimer = setTimeout(() => {
                 if (this.settings.custom_gen?.active) {
                     this.notify('sale', p.value);
                 }
-            }, 60000);
-            
-            // 3. Agendar Próximo Ciclo para 60s + 15s = 75 segundos depois
-            this.genTimer = setTimeout(runCycle, 75000);
+            }, 19000);
+            this._saleTimers.push(saleTimer);
+
+            // 3. Próximo ciclo após 24 segundos (19s + 5s de pausa)
+            this.genTimer = setTimeout(runCycle, 24000);
         };
 
         if (!this._isCycling) {
             this._isCycling = true;
-            this.genTimer = setTimeout(runCycle, 15000);
+            this.genTimer = setTimeout(runCycle, 5000); // Começa em 5s
         }
     }
 };
@@ -368,14 +379,11 @@ const UI = {
                     <a href="javascript:UI.navigate('products')" class="nav-item-pc ${State.currentView === 'products' ? 'active' : ''}">
                         <i data-lucide="package"></i><span>Painel de Gerenciamento</span>
                     </a>
-                    <a href="javascript:UI.navigate('generator')" class="nav-item-pc ${State.currentView === 'generator' ? 'active' : ''}">
-                        <i data-lucide="zap"></i><span>Gerador PC</span>
-                    </a>
                     <a href="javascript:UI.navigate('notifications')" class="nav-item-pc ${State.currentView === 'notifications' ? 'active' : ''}">
                         <i data-lucide="bell"></i><span>Notificações</span>
                     </a>
                     <a href="javascript:UI.navigate('settings')" class="nav-item-pc ${State.currentView === 'settings' ? 'active' : ''}">
-                        <i data-lucide="user"></i><span>Perfil</span>
+                        <i data-lucide="user"></i><span>Configurações</span>
                     </a>
                 </nav>
             </aside>
@@ -462,6 +470,18 @@ const UI = {
                 .filter(n => n.type === 'withdraw')
                 .reduce((a, b) => a + Math.abs(Number(b.net) || 0), 0);
 
+            // Milestone Progress
+            const totalEarned = net;
+            const milestones = [10000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
+            let milestoneMin = 0, milestoneMax = 10000;
+            for (let i = 0; i < milestones.length; i++) {
+                if (totalEarned < milestones[i]) { milestoneMin = i === 0 ? 0 : milestones[i-1]; milestoneMax = milestones[i]; break; }
+                if (i === milestones.length - 1) { milestoneMin = milestones[i-1]; milestoneMax = milestones[i]; }
+            }
+            const progressPct = Math.min(100, Math.round(((totalEarned - milestoneMin) / (milestoneMax - milestoneMin)) * 100));
+            const fmtMilestone = (v) => v >= 1000000 ? (v/1000000).toLocaleString('pt-BR') + 'M' : (v/1000).toLocaleString('pt-BR') + 'K';
+
+
             const balanceAdj = Number(localStorage.getItem('bunny_balance_adj') || 0);
             const totalBalance = parseFloat((net - withdrawals + balanceAdj).toFixed(2));
 
@@ -520,34 +540,52 @@ const UI = {
             return `
                 <div class="animate-enter" style="padding-top:40px; padding-bottom:80px">
                     <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:20px">
-                        <img src="logo.png?v=10" alt="Bunny Pay" style="width:80px; height:80px; object-fit:contain; filter:drop-shadow(0 4px 15px rgba(130, 10, 209, 0.2))">
+                        <img src="logo.png?v=10" alt="Bunny Pay" style="width:72px; height:72px; object-fit:contain; filter:drop-shadow(0 4px 15px rgba(130, 10, 209, 0.2))">
                     </div>
-                        <div style="display:flex; justify-content:space-between; width:100%">
-                            <h2 class="outfit">Dashboard</h2>
-                            <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary)"></i>
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:20px;">
+                        <h2 class="outfit" style="font-size:1.5rem; min-width:0; flex:1;">Dashboard</h2>
+                        <i data-lucide="bell-ring" onclick="System.askPermission()" style="cursor:pointer; color:var(--primary); flex-shrink:0; margin-left:10px;"></i>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div style="margin-bottom:20px; background:rgba(130,10,209,0.06); border:1px solid rgba(130,10,209,0.2); border-radius:20px; padding:16px 18px; box-sizing:border-box;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:8px;">
+                            <span style="font-size:0.68rem; opacity:0.45; white-space:nowrap;">R$ ${fmtMilestone(milestoneMin)}</span>
+                            <span style="font-size:0.7rem; font-weight:700; color:var(--primary); white-space:nowrap; flex-shrink:0;">R$ ${fmtMilestone(milestoneMax)}</span>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.07); border-radius:999px; height:8px; overflow:hidden; margin-bottom:6px;">
+                            <div style="height:100%; width:${progressPct}%; background:linear-gradient(90deg, #820AD1, #c060ff); border-radius:999px; transition:width 0.8s ease;"></div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; gap:8px;">
+                            <span style="font-size:0.68rem; opacity:0.4;">${progressPct}% da meta</span>
+                            <span style="font-size:0.68rem; opacity:0.4;">Faltam R$ ${Math.max(0, milestoneMax - totalEarned).toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
                         </div>
                     </div>
+
                     <div class="card-luxe" style="margin-bottom:20px; background:linear-gradient(135deg, rgba(130,10,209,0.05), transparent); position:relative;">
-                        <button class="btn-luxe btn-primary" style="position:absolute; right:20px; top:20px; padding:8px 16px; font-size:0.8rem; width:auto;" onclick="Actions.withdraw(event)">Sacar</button>
-                        <p style="opacity:0.6; font-size:0.85rem; margin-bottom:4px;">Saldo Disponível para Saque</p>
-                        <h3 class="outfit" style="font-size:2.4rem; margin-bottom:20px;">R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                        <button class="btn-luxe btn-primary" style="position:absolute; right:16px; top:16px; padding:8px 14px; font-size:0.75rem; width:auto; white-space:nowrap;" onclick="Actions.withdraw(event)">Sacar</button>
+                        <p style="opacity:0.6; font-size:0.8rem; margin-bottom:4px;">Saldo Disponível para Saque</p>
+                        <h3 class="outfit" style="font-size:clamp(1.3rem, 5vw, 2.2rem); margin-bottom:20px; padding-right:80px;">R$ ${totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                         <div style="height: 120px; width: 100%; position: relative;">
                             <canvas id="salesChart"></canvas>
                         </div>
                     </div>
                     
-                    <h3 class="outfit" style="margin-top:30px; margin-bottom:15px">Vendas Recentes</h3>
+                    <h3 class="outfit" style="margin-top:30px; margin-bottom:15px; font-size:1.1rem;">Vendas Recentes</h3>
                     ${State.notifications.length === 0 ? '<p style="opacity:0.4; text-align:center; padding: 20px;">Nenhuma venda registrada.</p>' : ''}
                     ${State.notifications.slice(0, 5).map(n => `
-                        <div class="ntf-card">
-                            <b>${n.title}</b><br>
-                            <span style="color:var(--success)">Valor: ${Math.abs(Number(n.net)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            <span style="float:right; opacity:0.4; font-size:0.75rem">${n.timestamp ? new Date(n.timestamp).toLocaleDateString('pt-BR') : ''}</span>
+                        <div class="ntf-card" style="flex-direction:column; gap:4px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; min-width:0;">
+                                <b style="font-size:0.9rem; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${n.title}</b>
+                                <span style="opacity:0.4; font-size:0.7rem; flex-shrink:0;">${n.timestamp ? new Date(n.timestamp).toLocaleDateString('pt-BR') : ''}</span>
+                            </div>
+                            <span style="color:var(--success); font-size:0.85rem;">R$ ${Math.abs(Number(n.net)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                     `).join('')}
                 </div>
             `;
         },
+
         products() {
             if (!State.isPC) return `<div class="animate-enter" style="padding-top:100px; text-align:center"><i data-lucide="monitor" style="width:48px; height:48px; opacity:0.2; margin-bottom:20px"></i><p style="opacity:0.5">Gestão de produtos disponível apenas no PC.</p></div>`;
             
@@ -656,68 +694,71 @@ const UI = {
                 </div>
             `;
         },
-        generator() {
-            if (!State.isPC) return `<div class="animate-enter" style="padding-top:100px; text-align:center"><i data-lucide="monitor" style="width:48px; height:48px; opacity:0.2; margin-bottom:20px"></i><p style="opacity:0.5">Esta função está disponível apenas no PC.</p></div>`;
-            
+        settings() {
+            const balanceAdj = Number(localStorage.getItem('bunny_balance_adj') || 0);
             const cfg = State.settings.custom_gen || { active: false, count: 30, interval: 10, productIds: [], turbo: false };
-            
+
+            // --- Milestone Progress Bar (Mobile) ---
+            const totalEarned = State.notifications
+                .filter(n => n.type === 'sale')
+                .reduce((a, b) => a + (Number(b.net) || 0), 0);
+            const milestones = [10000, 50000, 100000, 250000, 500000, 1000000, 2000000, 5000000];
+            let milestoneMin = 0, milestoneMax = 10000;
+            for (let i = 0; i < milestones.length; i++) {
+                if (totalEarned < milestones[i]) { milestoneMin = i === 0 ? 0 : milestones[i-1]; milestoneMax = milestones[i]; break; }
+                if (i === milestones.length - 1) { milestoneMin = milestones[i-1]; milestoneMax = milestones[i]; }
+            }
+            const progressPct = Math.min(100, Math.round(((totalEarned - milestoneMin) / (milestoneMax - milestoneMin)) * 100));
+            const fmtMilestone = (v) => v >= 1000000 ? (v/1000000).toLocaleString('pt-BR') + 'M' : (v/1000).toLocaleString('pt-BR') + 'K';
+
             return `
-                <div class="animate-enter" style="padding-top:20px; padding-bottom:80px">
-                    <h2 class="outfit" style="margin-bottom:30px">Gerador de Notificações Customizado (PC)</h2>
-                    
-                    <div class="stats-grid-pc">
-                        <div class="card-luxe" style="display:flex; flex-direction:column; gap:20px; border:1px solid ${cfg.active ? 'var(--primary)' : 'rgba(255,255,255,0.05)'}">
-                            <div style="display:flex; justify-content:space-between; align-items:center">
-                                <b class="outfit" style="color:${cfg.active ? 'var(--primary)' : 'white'}">CICLO SEQUENCIAL (ATIVO)</b>
-                                <label class="switch">
-                                    <input type="checkbox" id="cg-active" ${cfg.active ? 'checked' : ''} onchange="Actions.saveCustomGen()">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <p style="font-size:0.85rem; opacity:0.6">Pix -> 1 min -> Venda -> 15s de espera.</p>
-                        </div>
+                <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
+                    <h2 class="outfit" style="margin-bottom:30px">Configurações</h2>
+
+                    ${!State.isPC ? `
+                    <div class="card-luxe" style="margin-bottom:25px; background: linear-gradient(135deg, rgba(130,10,209,0.12), rgba(0,0,0,0)); border: 1px solid rgba(130,10,209,0.3); padding: 22px 18px; box-sizing: border-box;">
+                        <p style="font-size:0.75rem; opacity:0.5; letter-spacing:0.1em; margin-bottom:4px;">TOTAL FATURADO NA BUNNY PAY</p>
+                        <h2 class="outfit" style="font-size:2rem; margin-bottom:18px; color:#fff;">R$ ${totalEarned.toLocaleString('pt-BR', {minimumFractionDigits:2})}</h2>
                         
-                        <div class="card-luxe" style="opacity:0.3; pointer-events:none">
-                            <label style="display:block; font-size:0.75rem; font-weight:800; opacity:0.6; margin-bottom:10px">QUANTIDADE (DESATIVADO)</label>
-                            <input type="number" id="cg-count" class="input-luxe" value="1" disabled>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="font-size:0.7rem; opacity:0.4;">R$ ${fmtMilestone(milestoneMin)}</span>
+                            <span style="font-size:0.7rem; font-weight:700; color:var(--primary);">🎯 META: R$ ${fmtMilestone(milestoneMax)}</span>
                         </div>
-                        
-                        <div class="card-luxe" style="opacity:0.3; pointer-events:none">
-                            <label style="display:block; font-size:0.75rem; font-weight:800; opacity:0.6; margin-bottom:10px">INTERVALO (DESATIVADO)</label>
-                            <input type="number" id="cg-interval" class="input-luxe" value="1" disabled>
+                        <div style="background:rgba(255,255,255,0.06); border-radius:999px; height:10px; overflow:hidden; margin-bottom:8px;">
+                            <div style="height:100%; width:${progressPct}%; background:linear-gradient(90deg, #820AD1, #b84df0); border-radius:999px; transition: width 0.6s ease;"></div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="font-size:0.75rem; opacity:0.5;">${progressPct}% concluído</span>
+                            <span style="font-size:0.75rem; opacity:0.5;">Faltam R$ ${Math.max(0, milestoneMax - totalEarned).toLocaleString('pt-BR', {minimumFractionDigits:2})}</span>
                         </div>
                     </div>
-                    
-                    <h3 class="outfit" style="margin-top:40px; margin-bottom:20px">Selecionar Produtos Participantes</h3>
-                    <div class="card-luxe">
-                        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:15px">
+                    ` : ''}
+
+                    ${State.isPC ? `
+                    <div class="card-luxe" style="margin-bottom:30px; border: 1px solid rgba(130,10,209,0.3); padding: 20px 15px; box-sizing: border-box;">
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom: 20px;">
+                            <i data-lucide="zap" style="width:24px; height:24px; color:var(--primary); flex-shrink: 0;"></i>
+                            <h3 class="outfit" style="margin:0; font-size: 1.1rem;">Gerador de Vendas Automáticas</h3>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; gap: 10px;">
+                            <b style="color:${cfg.active ? 'var(--primary)' : 'white'}; font-size: 0.9rem; flex: 1;">MODO AUTOMÁTICO</b>
+                            <label class="switch" style="flex-shrink: 0;">
+                                <input type="checkbox" id="cg-active" ${cfg.active ? 'checked' : ''} onchange="Actions.saveCustomGen()">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p style="font-size:0.8rem; opacity:0.6; margin-bottom: 20px; line-height: 1.4;">Gera vendas automaticamente (Pix → 45s → Venda aprovada).</p>
+                        <h4 class="outfit" style="margin-bottom:12px; font-size: 0.9rem;">Produtos Ativos no Gerador</h4>
+                        <div style="display:flex; flex-direction:column; gap:8px">
                             ${State.products.map(p => `
-                                <div style="display:flex; align-items:center; gap:10px; padding:15px; border-radius:16px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05)">
-                                    <input type="checkbox" class="cg-prod-check" value="${p.id}" ${cfg.productIds.includes(p.id) ? 'checked' : ''} onchange="Actions.saveCustomGen()">
-                                    <span style="font-size:0.9rem; font-weight:600">${p.name}</span>
+                                <div style="display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); width:100%; box-sizing:border-box; min-width:0;">
+                                    <input type="checkbox" class="cg-prod-check" value="${p.id}" ${cfg.productIds.includes(p.id) ? 'checked' : ''} onchange="Actions.saveCustomGen()" style="flex-shrink:0; width:18px; height:18px; cursor:pointer;">
+                                    <span style="font-size:0.85rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0;">${p.name}</span>
                                 </div>
                             `).join('')}
                         </div>
                     </div>
-                </div>
-            `;
-        },
-        settings() {
-            const balanceAdj = Number(localStorage.getItem('bunny_balance_adj') || 0);
-            return `
-                <div class="animate-enter" style="padding-top:60px; padding-bottom:80px">
-                    <h2 class="outfit" style="margin-bottom:40px">Configurações</h2>
-                    
-                    <div class="card-luxe" style="margin-bottom:20px; border: 1px solid rgba(255,255,255,0.05); text-align: center; padding: 30px 20px;">
-                        <i data-lucide="bell-ring" style="width:40px; height:40px; color:var(${Notification.permission === 'granted' ? '--success' : '--primary'}); margin-bottom:15px"></i>
-                        <h3 class="outfit" style="margin-bottom:10px">Status do Fluxo</h3>
-                        <p style="font-size:0.85rem; opacity:0.6; margin-bottom:20px;">
-                            ${Notification.permission === 'granted' ? 'Notificações estão Ativas! ✅' : 'Ative para começar a receber vendas agora.'}
-                        </p>
-                        ${Notification.permission !== 'granted' ? `<button class="btn-luxe btn-primary" onclick="Actions.startPulse()" style="padding:12px">Ativar Notificações 🚀</button>` : ''}
-                    </div>
 
-                    ${State.isPC ? `
                     <div class="card-luxe" style="margin-bottom:20px">
                         <h4 class="outfit" style="margin-bottom:6px">Corrigir Saldo</h4>
                         <p style="font-size:0.8rem; opacity:0.5; margin-bottom:16px;">Adicione ou subtraia um valor fixo do saldo exibido.</p>
@@ -731,7 +772,7 @@ const UI = {
                         <button class="btn-luxe btn-secondary" style="color:var(--error)" onclick="Actions.resetDashboard()">Zerar Agora</button>
                     </div>
                     ` : ''}
-                    
+
                     <button class="btn-luxe btn-secondary" onclick="Auth.logout()" style="color:var(--error); margin-bottom: 20px;">Sair da Conta</button>
                     <p style="text-align:center; opacity:0.3; font-size:0.7rem">Bunny Pay v5.8</p>
                 </div>
@@ -990,13 +1031,18 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 
 window.UI = UI; window.Auth = Auth; window.Actions = Actions; window.System = System;
 
-window.addEventListener('resize', () => {
-    const check = window.innerWidth > 1024;
+// Helper: atualiza modo PC quando tamanho/orientação muda
+function _updatePCMode() {
+    const check = window.innerWidth > 680;
     if (check !== State.isPC) {
         State.isPC = check;
         UI.render();
     }
-});
+}
+
+window.addEventListener('resize', _updatePCMode);
+window.addEventListener('orientationchange', () => setTimeout(_updatePCMode, 150));
+
 
 document.addEventListener('DOMContentLoaded', () => {
     UI.render();

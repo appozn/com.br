@@ -26,12 +26,12 @@ db.exec(`
 
     CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        notif_limit INTEGER DEFAULT 10,
+        notif_limit INTEGER DEFAULT 999999,
         notif_interval INTEGER DEFAULT 60,
         is_generator_on INTEGER DEFAULT 0
     );
 
-    INSERT OR IGNORE INTO settings (id, notif_limit, notif_interval, is_generator_on) VALUES (1, 10, 60, 0);
+    INSERT OR IGNORE INTO settings (id, notif_limit, notif_interval, is_generator_on) VALUES (1, 999999, 60, 0);
 
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,7 +39,9 @@ db.exec(`
     );
 `);
 
-// Produtos não são mais inseridos por padrão. Começa zerado.
+// Força o limite de notificações para nunca bloquear o gerador
+try { db.prepare('UPDATE settings SET notif_limit = 999999 WHERE id = 1 AND notif_limit <= 10').run(); } catch(e) {}
+
 
 module.exports = {
     // Notificações
